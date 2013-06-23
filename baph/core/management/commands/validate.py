@@ -16,8 +16,9 @@ class Command(NoArgsCommand):
         configure_mappers()
         
         print '\nPost-Validation Tables:'
-        for table in Base.metadata.tables:
+        for table in sorted(Base.metadata.tables):
             print '\t', table
+
         """
         print '\nPost-Validation Class Registry:'
         for k,v in sorted(Base._decl_class_registry.items()):

@@ -8,15 +8,19 @@ from django.forms import ValidationError
 from sqlalchemy import event, inspect
 from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
 from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
+from sqlalchemy.ext.declarative.base import (_as_declarative, _add_attribute,
+    _MapperConfig)
+from sqlalchemy.ext.declarative.clsregistry import add_class
 from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
 from sqlalchemy.orm import mapper, configure_mappers
 from sqlalchemy.orm.attributes import instance_dict, instance_state
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 
 from baph.db.models.loading import get_model, register_models
-from baph.db.models.mixins import CacheMixin
+from baph.db.models.mixins import CacheMixin, ModelPermissionMixin
 from baph.db.models.options import Options
 from baph.db.models import signals
+from baph.utils.importing import safe_import, remove_class
 
 
 def constructor(self, **kwargs):
@@ -43,14 +47,6 @@ def constructor(self, **kwargs):
         else:
             setattr(self, attr.key, default)
 
-    '''
-    for col in cls.__table__.c:
-        if col.default is not None:
-            if callable(col.default.arg):
-                setattr(self, col.key, col.default.arg({}))
-            else:
-                setattr(self, col.key, col.default.arg)
-    '''
     # now load in the kwargs values
     for k in kwargs:
         if not hasattr(cls, k):
@@ -65,7 +61,7 @@ def set_polymorphic_base_mapper(mapper_, class_):
         polymorphic_map.update(mapper_.polymorphic_map)
         mapper_.polymorphic_map = polymorphic_map
 
-class Model(CacheMixin):
+class Model(CacheMixin): #, ModelPermissionMixin):
 
     @classmethod
     def create(cls, *args, **kwargs):
@@ -80,10 +76,10 @@ class Model(CacheMixin):
         module = import_module(cls_mod)
         return getattr(module, cls_name)
 
-    def permission_context(self, request):
+    def permission_context(self, request): # TODO: remove whitelabel reference
         return {
             'user_id': request.user.id,
-            'user_whitelabel': request.user.whitelabel,
+            'user_whitelabel': request.user.whitelabel.whitelabel,
             }
 
     def update(self, data):
@@ -95,11 +91,42 @@ class Model(CacheMixin):
     def is_deleted(self):
         return False
 
-class ModelBase(DeclarativeMeta):
+class ModelBase(type):
+
+    def __init__(cls, name, bases, attrs):
+        #print '%s.__init__(%s)' % (name, cls)
+        found = False
+        registry = cls._decl_class_registry
+        if name in registry:
+            found = True
+        elif cls in registry.values():
+            found = True
+            add_class(name, cls)
+
+        if '_decl_class_registry' not in cls.__dict__:
+            if not found:
+                _as_declarative(cls, name, cls.__dict__)
+
+        type.__init__(cls, name, bases, attrs)
+
+    def __setattr__(cls, key, value):
+        _add_attribute(cls, key, value)
 
     def __new__(cls, name, bases, attrs):
+        #print '%s.__new__(%s)' % (name, cls)
         super_new = super(ModelBase, cls).__new__
-        new_class = super_new(cls, name, bases, attrs)
+
+        parents = [b for b in bases if isinstance(b, ModelBase) and
+            not (b.__name__ == 'Base' and b.__mro__ == (b, object))]
+        if not parents:
+            return super_new(cls, name, bases, attrs)
+
+        module = attrs.pop('__module__')
+        new_class = super_new(cls, name, bases, {'__module__': module})
+
+        # check the class registry to see if we created this already
+        if name in new_class._decl_class_registry:
+            return new_class._decl_class_registry[name]
 
         attr_meta = attrs.pop('Meta', None)
         if not attr_meta:
@@ -122,12 +149,46 @@ class ModelBase(DeclarativeMeta):
                 if not getattr(new_class._meta, k, None):
                     setattr(new_class._meta, k, v)
 
+        if new_class._meta.swappable:
+            if not new_class._meta.swapped:
+                # class is swappable, not hasn't been swapped out, so we create
+                # an alias to the base class, rather than trying to create a new
+                # class under a second name
+                base_cls  = bases[0]
+                base_cls.add_to_class('_meta', new_class._meta)
+                return base_cls
+
+            # class has been swapped out
+            model = safe_import(new_class._meta.swapped, [new_class.__module__])
+
+            for b in bases:
+                if not getattr(b, '__mapper__', None):
+                    continue
+                if not getattr(b, '_sa_class_manager', None):
+                    continue
+                subs = [c for c in b.__subclasses__() if c.__name__ != name]
+                if any(c.__name__ != name for c in b.__subclasses__()):
+                    # this base class has a subclass inheriting from it, so we
+                    # should leave this class alone, we'll need it
+                    continue
+                else:
+                    # this base class is used by no subclasses, so it can be
+                    # removed from appcache/cls registry/mod registry
+                    remove_class(b, name)
+            return model
+
+        # Add all attributes to the class.
+        for obj_name, obj in attrs.items():
+            new_class.add_to_class(obj_name, obj)
+        
+        if attrs.get('__abstract__', None):
+            return new_class
+
         signals.class_prepared.send(sender=new_class)
         register_models(new_class._meta.app_label, new_class)
         return get_model(new_class._meta.app_label, name,
                          seed_cache=False, only_installed=False)
 
-        return new_class
 
     def add_to_class(cls, name, value):
         if hasattr(value, 'contribute_to_class'):
@@ -136,20 +197,14 @@ class ModelBase(DeclarativeMeta):
             setattr(cls, name, value)
 
     def get_prop_from_proxy(cls, proxy):
-        if proxy.scalar:
-            # column
-            col = proxy.remote_attr.property.columns
-            data_type = type(col[0].type)
-            prop = proxy.remote_attr.property
-        elif proxy.remote_attr.extension_type == ASSOCIATION_PROXY:
+        if proxy.remote_attr.extension_type == ASSOCIATION_PROXY:
+            # proxy
             prop = cls.get_prop_from_proxy(proxy.remote_attr)
         elif isinstance(proxy.remote_attr.property, RelationshipProperty):
-            data_type = proxy.remote_attr.property.collection_class or object
-            readonly = proxy.remote_attr.info.get('readonly', False)
+            # relationship
             prop = proxy.remote_attr.property
         else:
-            col = proxy.remote_attr.property.columns
-            data_type = type(col[0].type)
+            # column
             prop = proxy.remote_attr.property
         return prop
 
@@ -164,19 +219,13 @@ class ModelBase(DeclarativeMeta):
                 # not a property
                 continue
             elif attr.extension_type == HYBRID_PROPERTY:
-                data_type = type(attr.expr(cls).type)
-                readonly = not attr.fset
                 prop = attr
             elif attr.extension_type == ASSOCIATION_PROXY:
                 proxy = getattr(cls, key)
                 prop = cls.get_prop_from_proxy(proxy)
             elif isinstance(attr.property, ColumnProperty):
-                data_type = type(attr.property.columns[0].type)
-                readonly = attr.info.get('readonly', False)
                 prop = attr.property
             elif isinstance(attr.property, RelationshipProperty):
-                data_type = attr.property.collection_class or object
-                readonly = attr.info.get('readonly', False)
                 prop = attr.property
             yield (key, prop)
 

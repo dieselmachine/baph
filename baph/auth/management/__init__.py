@@ -7,12 +7,11 @@ from django.core import exceptions
 from django.core.management.base import CommandError
 from django.db import DEFAULT_DB_ALIAS, router
 from django.utils.encoding import DEFAULT_LOCALE_ENCODING
-#from django.utils import six
-#from django.utils.six.moves import input
 try:
     from django.utils.text import slugify
 except:
     from django.template.defaultfilters import slugify
+from sqlalchemy.ext.declarative import has_inherited_table
 
 from baph.auth import models as auth_app #, get_user_model
 from baph.db.models import get_models
@@ -119,10 +118,9 @@ def _check_permission_clashing(custom, builtin):
         elif perm.codename in builtin_codenames:
             raise CommandError(
                 "The permission codename '%s' clashes with a builtin permission "
-                #"for model '%s.%s'." %
                 % (perm.codename,)) # ctype.app_label, ctype.model_class().__name__))
         pool.add(perm.codename)
-        
+
 def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
                        **kwargs):
     app_models = []
@@ -136,6 +134,13 @@ def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
     searched_perms = list()
     searched_codenames = set()
     for klass in app_models:
+        if klass.__mapper__.polymorphic_on is not None:
+            if has_inherited_table(klass):
+                # ignore polymorphic subclasses
+                continue
+        elif klass.__subclasses__():
+            # ignore base if subclass is present
+            continue
         for perm in _get_all_permissions(klass._meta):
             if perm.codename in searched_codenames:
                 continue

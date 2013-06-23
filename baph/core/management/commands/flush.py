@@ -54,8 +54,7 @@ Are you sure you want to do this?
             try:
                 session = Session()
                 for table in reversed(Base.metadata.sorted_tables):
-                    if table.name == 'baph_auth_permissions':
-                        # TODO: this is terrible, fix it
+                    if table.info.get('preserve_during_flush', False):
                         continue
                     try:
                         session.execute(table.delete())

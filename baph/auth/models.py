@@ -40,8 +40,9 @@ from django.utils.importlib import import_module
 from django.utils.translation import ugettext as _
 from sqlalchemy import *
 from sqlalchemy.ext.associationproxy import association_proxy
-from sqlalchemy.ext.declarative import declared_attr
-from sqlalchemy.orm import synonym, relationship, backref
+from sqlalchemy.ext.declarative import declared_attr, clsregistry
+from sqlalchemy.ext.declarative.base import _add_attribute
+from sqlalchemy.orm import synonym, relationship, backref, RelationshipProperty
 
 from baph.db.models import Model
 from baph.db.orm import ORM, Base
@@ -55,6 +56,10 @@ orm = ORM.get()
 AUTH_USER_FIELD_TYPE = getattr(settings, 'AUTH_USER_FIELD_TYPE', 'UUID')
 AUTH_USER_FIELD = UUID if AUTH_USER_FIELD_TYPE == 'UUID' else Integer
 
+def _generate_user_id_column():
+    if AUTH_USER_FIELD_TYPE != 'UUID':
+        return Column(AUTH_USER_FIELD, primary_key=True)
+    return Column(UUID, primary_key=True, default=uuid.uuid4)
 
 def get_hexdigest(algorithm, salt, raw_password):
     '''Extends Django's :func:`django.contrib.auth.models.get_hexdigest` by
@@ -69,46 +74,222 @@ def get_hexdigest(algorithm, salt, raw_password):
     else:
         raise Exception('Unsupported algorithm "%s"' % algorithm)
 
+def update_last_login(sender, user, **kwargs):
+    """
+    A signal receiver which updates the last_login date for
+    the user logging in.
+    """
+    user.last_login = timezone.now()
+    user.save(update_fields=['last_login'])
+
+def get_or_fail(codename):
+    session = orm.sessionmaker()
+    try:
+        perm = session.query(Permission).filter_by(codename=codename).one()
+    except:
+        raise ValueError('%s is not a valid permission codename' % codename)
+    return PermissionAssociation(permission=perm)
+
+def string_to_model(string):
+    if string in Base._decl_class_registry:
+        return Base._decl_class_registry[string]
+    elif string.title() in Base._decl_class_registry:
+        return Base._decl_class_registry[string.title()]
+    else:
+        # this string doesn't match a resource
+        return None
+
 # fun with monkeypatching
 exec inspect.getsource(check_password)
 
-def _generate_user_id_column():
-    if AUTH_USER_FIELD_TYPE != 'UUID':
-        return Column(AUTH_USER_FIELD, primary_key=True)
-    return Column(UUID, primary_key=True, default=uuid.uuid4)
 
-class BaseUser(Base, Model):
-    '''The SQLAlchemy model for Django's ``auth_user`` table.
-    Users within the Django authentication system are represented by this
-    model.
+# permission classes
 
-    Username and password are required. Other fields are optional.
-    '''
-    __tablename__ = 'auth_user'
+class Permission(Base, Model):
+    __tablename__ = 'baph_auth_permissions'
+    __table_args__ = {
+        'info': {'preserve_during_flush': True},
+        }
+    id = Column(Integer, primary_key=True)
+    name = Column(Unicode(100))
+    codename = Column(String(100), unique=True)
+    resource = Column(String(50))
+    action = Column(String(16))
+    key = Column(String(100))
+    value = Column(String(50))
 
+'''
+class Permission(Base, Model):
+    __tablename__ = 'baph_permissions'
+    __table_args__ = {
+        'info': {'preserve_during_flush': True},
+        }
+
+    id = Column(Integer, primary_key=True)
+    name = Column(Unicode(200))
+    codename = Column(String(200), unique=True)
+    resource = Column(String(50))
+    action = Column(String(16))
+    key = Column(String(200))
+    value = Column(String(100))
+    base_class = Column(String(50), index=True)
+'''
+
+class PermissionStruct:
+    def __init__(self, **entries): 
+        self.__dict__.update(entries)
+
+class PermissionMixin(object):
+
+    def get_context(self): # TODO: No explicit references to whitelabel
+        return {
+            'user_id': self.id,
+            'user_whitelabel': self.whitelabel.whitelabel,
+            'user_whitelabel_id': self.whitelabel.id,
+            }
+
+    def get_user_permissions(self):
+        ctx = self.get_context()
+        permissions = {}
+        for assoc in self.permission_assocs:
+            perm = assoc.permission
+            model = string_to_model(perm.resource)
+            model_name = model.__name__ if model else perm.resource
+            if model_name not in permissions:
+                permissions[model_name] = {}
+            if perm.action not in permissions[model_name]:
+                permissions[model_name][perm.action] = set()
+            perm = PermissionStruct(**perm.to_dict())
+            if perm.value:
+                perm.value = perm.value % ctx
+            permissions[model_name][perm.action].add(perm)
+        return permissions
+
+    def get_group_permissions(self):
+        permissions = {}
+        for user_group in self.groups:
+            ctx = self.get_context()
+            if user_group.key:
+                ctx[user_group.key] = user_group.value
+            group = user_group.group
+            if group.whitelabel not in permissions: #TODO remove whitelabel reference
+                permissions[group.whitelabel] = {}
+            perms = permissions[group.whitelabel]
+            for assoc in group.permission_assocs:
+                perm = assoc.permission
+                model = string_to_model(perm.resource)
+                model_name = model.__name__ if model else perm.resource
+                if model_name not in perms:
+                    perms[model_name] = {}
+                if perm.action not in perms[model_name]:
+                    perms[model_name][perm.action] = set()
+                perm = PermissionStruct(**perm.to_dict())
+                if perm.value:
+                    perm.value = perm.value % ctx
+                perms[model_name][perm.action].add(perm)
+        return permissions
+
+    def get_all_permissions(self):
+        permissions = self.get_group_permissions()
+        user_perms = self.get_user_permissions()
+        if not user_perms:
+            return permissions
+        if not None in permissions:
+            permissions[None] = {}
+        for resource, actions in user_perms.items():
+            if resource not in permissions[None]:
+                permissions[None][resource] = {}
+            for action, perms in actions.items():
+                if action not in permissions[None][resource]:
+                    permissions[None][resource][action] = set()
+                permissions[None][resource][action].update(perms)
+        return permissions
+
+    def get_current_permissions(self):
+        if hasattr(self, '_perm_cache'):
+            return self._perm_cache
+
+        #whitelabel = get_whitelabel()
+        perms = {}
+        for wl, wl_perms in self.get_all_permissions().items():
+            #if not wl in (None, whitelabel['whitelabel']):
+            #    continue
+            for rsrc, rsrc_perms in wl_perms.items():
+                if not rsrc in perms:
+                    perms[rsrc] = {}
+                for action, action_perms in rsrc_perms.items():
+                    if not action in perms[rsrc]:
+                        perms[rsrc][action] = set()
+                    perms[rsrc][action].update(action_perms)
+        setattr(self, '_perm_cache', perms)
+        return perms
+
+    def get_resource_permissions(self, resource, action=None):
+        if not resource:
+            raise Exception('resource is required for permission filtering')
+        perms = self.get_current_permissions()
+        model = string_to_model(resource)
+        model_name = model.__name__ if model else resource        
+        if model_name not in perms:
+            return set()
+        perms = perms.get(model_name, {})
+        if action:
+            perms = perms.get(action, {})
+        return perms
+
+# organization classes
+
+class AbstractBaseOrganization(Base):
+    __abstract__ = True
+    id = Column(Integer, primary_key=True)
+
+class BaseOrganization(AbstractBaseOrganization):
+    __tablename__ = 'baph_auth_organizations'
+    name = Column(Unicode(200), nullable=False)
+
+class Organization(BaseOrganization):
+    class Meta:
+        swappable = 'BAPH_ORGANIZATION_MODEL'
+
+
+# group classes
+
+class AbstractBaseGroup(Base):
+    __abstract__ = True
+    id = Column(Integer, primary_key=True)
+
+    users = association_proxy('user_groups', 'user',
+        creator=lambda v: UserGroup(user=v))
+    permissions = association_proxy('permission_assocs', 'permission')
+    codenames = association_proxy('permission_assocs', 'codename',
+        creator=get_or_fail)
+
+class BaseGroup(AbstractBaseGroup):
+    __tablename__ = 'baph_auth_groups'
+    name = Column(Unicode(100), nullable=False)
+    
+class Group(BaseGroup):
+    class Meta:
+        swappable = 'BAPH_GROUP_MODEL'
+
+setattr(BaseGroup, Organization._meta.model_name+'_id',
+    Column(Integer, ForeignKey(Organization.id), index=True))
+setattr(BaseGroup, Organization._meta.model_name,
+    RelationshipProperty(Organization, backref=Group._meta.model_name_plural))
+
+
+# user classes
+
+class AbstractBaseUser(Base):
+    __abstract__ = True
     id = _generate_user_id_column()
-    username = Column(Unicode(75), nullable=False, unique=True)
-    first_name = Column(Unicode(30), nullable=True)
-    last_name = Column(Unicode(30), nullable=True)
-    email = Column(String(settings.EMAIL_FIELD_LENGTH), index=True,
-                    nullable=False)
     password = Column(String(256), nullable=False)
-    is_staff = Column(Boolean, default=False, nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-    is_superuser = Column(Boolean, default=False, nullable=False)
     last_login = Column(DateTime, default=datetime.now, nullable=False,
                         onupdate=datetime.now)
-    date_joined = Column(DateTime, default=datetime.now, nullable=False)
+    is_active = True
 
     permissions = association_proxy('permission_assocs', 'permission')
     codenames = association_proxy('permission_assocs', 'codename')
-
-    def get_absolute_url(self):
-        '''The absolute path to a user's profile.
-
-        :rtype: :class:`str`
-        '''
-        return '/users/%s/' % urllib.quote(smart_str(self.username))
 
     def check_password(self, raw_password):
         '''Tests if the password given matches the password of the user.'''
@@ -116,25 +297,11 @@ class BaseUser(Base, Model):
             return False
         return check_password(raw_password, self.password)
 
-    def email_user(self, subject, message, from_email=None, **kwargs):
-        '''Sends an e-mail to this User.'''
-        from django.core.mail import send_mail
-        if not from_email:
-            from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None)
-        send_mail(subject, message, from_email, [self.email], **kwargs)
-
     @staticmethod
     def generate_salt(algo='sha1'):
         '''Generates a salt for generating digests.'''
         return get_hexdigest(algo, str(random.random()),
                              str(random.random()))[:5]
-
-    def get_full_name(self):
-        '''Retrieves the first_name plus the last_name, with a space in
-        between and no leading/trailing whitespace.
-        '''
-        full_name = u'%s %s' % (self.first_name, self.last_name)
-        return full_name.strip()
 
     def has_usable_password(self):
         '''Determines whether the user has a password.'''
@@ -170,11 +337,19 @@ class BaseUser(Base, Model):
         '''Sets a password value that will never be a valid hash.'''
         self.password = UNUSABLE_PASSWORD
 
-    def __repr__(self):
-        return '<User(%s, "%s")>' % (self.id, self.get_full_name())
 
-    def __unicode__(self):
-        return unicode(self.username)
+
+class BaseUser(AbstractBaseUser, PermissionMixin):
+    __tablename__ = 'auth_user'
+    username = Column(Unicode(75), nullable=False, unique=True)
+    first_name = Column(Unicode(30), nullable=True)
+    last_name = Column(Unicode(30), nullable=True)
+    email = Column(String(settings.EMAIL_FIELD_LENGTH), index=True,
+                    nullable=False)
+    is_staff = Column(Boolean, default=False, nullable=False)
+    is_superuser = Column(Boolean, default=False, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    date_joined = Column(DateTime, default=datetime.now, nullable=False)
 
     @classmethod
     def create_user(cls, username, email, password=None, session=None,
@@ -217,54 +392,39 @@ class BaseUser(Base, Model):
         session.commit()
         return user
 
+    def email_user(self, subject, message, from_email=None, **kwargs):
+        '''Sends an e-mail to this User.'''
+        from django.core.mail import send_mail
+        if not from_email:
+            from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None)
+        send_mail(subject, message, from_email, [self.email], **kwargs)
 
-user_cls = getattr(settings, 'BAPH_USER_CLASS', None)
-if user_cls:
-    try:
-        app_label, model_name = user_cls.rsplit('.', 1)
-    except ValueError:
-        raise exceptions.ImproperlyConfigured('''\
-    app_label and model_name should be separated by a dot in the
-    BAPH_USER_CLASS setting''')
+    def get_absolute_url(self):
+        '''The absolute path to a user's profile.
 
-    try:
-        module = import_module(app_label)
-        model_cls = getattr(module, model_name, None)
-        if model_cls is None:
-            raise exceptions.ImproperlyConfigured('''\
-    Unable to load the user profile model, check BAPH_USER_CLASS in your project
-    settings''')
-    except (ImportError, ImproperlyConfigured):
-        raise
+        :rtype: :class:`str`
+        '''
+        return '/users/%s/' % urllib.quote(smart_str(self.username))
 
-    User = model_cls
-else:
-    User = BaseUser
-    
-
-def get_or_fail(codename):
-    session = orm.sessionmaker()
-    try:
-        perm = session.query(Permission).filter_by(codename=codename).one()
-    except:
-        raise ValueError('%s is not a valid permission codename' % codename)
-    return PermissionAssociation(permission=perm)
+    def get_full_name(self):
+        '''Retrieves the first_name plus the last_name, with a space in
+        between and no leading/trailing whitespace.
+        '''
+        full_name = u'%s %s' % (self.first_name, self.last_name)
+        return full_name.strip()
 
 
-class Group(Base, Model):
-    '''Groups'''
-    __tablename__ = 'baph_auth_groups'
+class User(BaseUser):
+    class Meta:
+        swappable = 'BAPH_USER_MODEL'
 
-    id = Column(Integer, primary_key=True)
-    whitelabel = Column(Unicode(100), info={'readonly': True})
-    name = Column(Unicode(100))
+setattr(BaseUser, Organization._meta.model_name+'_id',
+    Column(Integer, ForeignKey(Organization.id), index=True))
+setattr(BaseUser, Organization._meta.model_name,
+    RelationshipProperty(Organization, backref=User._meta.model_name_plural))
 
-    users = association_proxy('user_groups', 'user',
-        creator=lambda v: UserGroup(user=v))
 
-    permissions = association_proxy('permission_assocs', 'permission')
-    codenames = association_proxy('permission_assocs', 'codename',
-        creator=get_or_fail)
+# association classes
 
 class UserGroup(Base, Model):
     '''User groups'''
@@ -287,17 +447,6 @@ class UserGroup(Base, Model):
     
     group = relationship(Group, lazy=True, uselist=False,
         backref=backref('user_groups', lazy=True, uselist=True))
-
-class Permission(Base, Model):
-    __tablename__ = 'baph_auth_permissions'
-    id = Column(Integer, primary_key=True)
-    name = Column(Unicode(100))
-    codename = Column(String(100), unique=True)
-    resource = Column(String(50))
-    action = Column(String(16))
-    key = Column(String(100))
-    value = Column(String(50))
-
 
 class PermissionAssociation(Base, Model):
     __tablename__ = 'baph_auth_permission_assoc'
