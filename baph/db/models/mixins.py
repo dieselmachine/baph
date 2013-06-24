@@ -2,7 +2,7 @@ import datetime
 
 from django.conf import settings
 from django.core.cache import get_cache
-from sqlalchemy import Column, DateTime, func
+from sqlalchemy import Column, DateTime, func, inspect
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm.attributes import get_history, instance_dict
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
@@ -237,3 +237,107 @@ class CacheMixin(object):
                 cache.set(key, 1)
             else:
                 cache.incr(key)
+                
+class ModelPermissionMixin(object):
+
+    def get_context(self):
+        ctx = {}
+        for key,attr in inspect(self.__class__).all_orm_descriptors.items():
+            if not attr.is_attribute:
+                continue
+            if type(attr.property) == ColumnProperty:
+                cls_name = self.__class__.__name__.lower()
+                ctx_key = '%s.%s' % (cls_name, key)
+                ctx[ctx_key] = getattr(self, key)
+                continue
+            if type(attr.property) != RelationshipProperty:
+                continue
+            if attr.property.direction.name != 'MANYTOONE':
+                continue
+            if len(attr.property.local_remote_pairs) != 1:
+                continue            
+                
+            parent = getattr(self, key)
+            if parent:
+                ctx.update(parent.get_context())
+        return ctx
+
+    @classmethod
+    def get_fks(cls, include_parents=True, remote_key=None):
+        #print 'get fks:', cls, remote_key
+        keys = []
+        cls_name = cls.__name__
+
+        # add permission for unrestricted access
+        keys.append( ('any', None, None, None, cls_name) )
+
+        # add permission for single instance access
+        if len(cls.__mapper__.primary_key) == 1:
+            col_key = cls._meta.permission_column # or (cls.__name__.lower() + '_id')
+            #key = cls.__mapper__.primary_key[0].key
+            key = cls._meta.permission_column or cls.__mapper__.primary_key[0].key
+            kwarg = cls._meta.permission_pk_kwarg or key
+            value = '%%(%s)s' % kwarg
+            keys.append( ('single', key, value, col_key, cls_name) )
+
+        for k,v in cls._meta.permission_values.items():
+            active = v.get(remote_key, v.values()[0])
+            #key = cls.__mapper__.primary_key[0].key
+            key = cls._meta.permission_column or cls.__mapper__.primary_key[0].key
+            keys.append( (k, key, active, None, cls_name) )
+
+        if not include_parents:
+            return keys
+
+        fks = []
+        for key in cls._meta.permission_parents:
+            attr = getattr(cls, key)
+            if not attr.is_attribute:
+                continue
+            prop = attr.property
+            if type(prop) != RelationshipProperty:
+                continue
+            if prop.direction.name != 'MANYTOONE':
+                continue
+            if len(prop.local_remote_pairs) != 1:
+                continue
+
+            sub_cls = prop.argument
+            col = prop.local_remote_pairs[0][0]
+            remote_col = prop.local_remote_pairs[0][1]
+
+            if type(sub_cls) == type(lambda x:x):
+                # activate lazy-load functions
+                sub_cls = sub_cls()
+            if hasattr(sub_cls, 'is_mapper') and sub_cls.is_mapper:
+                # we found a mapper, grab the class from it
+                sub_cls = sub_cls.class_
+            inc_par = sub_cls._meta.permission_terminator == False
+            sub_fks = sub_cls.get_fks(include_parents=inc_par,
+                                      remote_key=remote_col.key)
+
+            for limiter, key_, value, col_key, base_cls in sub_fks:
+                if not key_:
+                    continue
+                key_ = '%s.%s' % (key, key_)
+                if limiter == 'single' or not col_key:
+                    col_key = col.key
+                    attr = getattr(cls, col.key, None)
+                    if not isinstance(attr, RelationshipProperty):
+                        # the column is named differently from the attr
+                        for k,v in cls.__mapper__.all_orm_descriptors.items():
+                            if not hasattr(v, 'property'):
+                                continue
+                            if not isinstance(v.property, ColumnProperty):
+                                continue
+                            if v.property.columns[0] == col:
+                                col_key = k
+                                break
+                if limiter == 'single':
+                    #print 'single limiter', key_, col_key
+                    limiter = key_.split('.')[-2]
+                    value = '%%(%s)s' % col_key
+                    #print '\t', limiter, value
+                    #print 'out:', (limiter, key_, value, col_key, cls_name)
+                keys.append( (limiter, key_, value, col_key, cls_name) )
+        return keys

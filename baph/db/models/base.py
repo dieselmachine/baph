@@ -61,7 +61,7 @@ def set_polymorphic_base_mapper(mapper_, class_):
         polymorphic_map.update(mapper_.polymorphic_map)
         mapper_.polymorphic_map = polymorphic_map
 
-class Model(CacheMixin): #, ModelPermissionMixin):
+class Model(CacheMixin, ModelPermissionMixin):
 
     @classmethod
     def create(cls, *args, **kwargs):
@@ -75,12 +75,6 @@ class Model(CacheMixin): #, ModelPermissionMixin):
         cls_mod, cls_name = cls_path.rsplit('.', 1)
         module = import_module(cls_mod)
         return getattr(module, cls_name)
-
-    def permission_context(self, request): # TODO: remove whitelabel reference
-        return {
-            'user_id': request.user.id,
-            'user_whitelabel': request.user.whitelabel.whitelabel,
-            }
 
     def update(self, data):
         for key, value in data.iteritems():

@@ -141,13 +141,6 @@ class PermissionStruct:
 
 class PermissionMixin(object):
 
-    def get_context(self): # TODO: No explicit references to whitelabel
-        return {
-            'user_id': self.id,
-            'user_whitelabel': self.whitelabel.whitelabel,
-            'user_whitelabel_id': self.whitelabel.id,
-            }
-
     def get_user_permissions(self):
         ctx = self.get_context()
         permissions = {}
@@ -166,15 +159,17 @@ class PermissionMixin(object):
         return permissions
 
     def get_group_permissions(self):
+        org_key = '%s_id' % Organization._meta.model_name
+        ctx = self.get_context()
         permissions = {}
         for user_group in self.groups:
-            ctx = self.get_context()
             if user_group.key:
                 ctx[user_group.key] = user_group.value
             group = user_group.group
-            if group.whitelabel not in permissions: #TODO remove whitelabel reference
-                permissions[group.whitelabel] = {}
-            perms = permissions[group.whitelabel]
+            org_id = getattr(group, org_key)
+            if org_id not in permissions:
+                permissions[org_id] = {}
+            perms = permissions[org_id]
             for assoc in group.permission_assocs:
                 perm = assoc.permission
                 model = string_to_model(perm.resource)
@@ -209,11 +204,8 @@ class PermissionMixin(object):
         if hasattr(self, '_perm_cache'):
             return self._perm_cache
 
-        #whitelabel = get_whitelabel()
         perms = {}
         for wl, wl_perms in self.get_all_permissions().items():
-            #if not wl in (None, whitelabel['whitelabel']):
-            #    continue
             for rsrc, rsrc_perms in wl_perms.items():
                 if not rsrc in perms:
                     perms[rsrc] = {}
