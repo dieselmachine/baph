@@ -65,9 +65,9 @@ class Command(NoArgsCommand):
         interface = options.get('interface', None)
 
         from dhplatform.pages.models import PageModule as Obj
-        fs = Obj._meta.fields
-        for k,f in fs:
-            print f
+        #fs = Obj._meta.fields
+        #for k,f in fs:
+        #    print f
 
         try:
             if use_plain:

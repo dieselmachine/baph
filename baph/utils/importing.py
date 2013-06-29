@@ -194,7 +194,7 @@ def remove_class(cls, name):
         unregister_models(cls._meta.app_label, cls._meta.model_name)
 
         # remove from SA class registry
-        if name in cls._decl_class_registry:
+        if cls.__name__ in cls._decl_class_registry:
             del cls._decl_class_registry[cls.__name__]
 
         # remove from SA module registry

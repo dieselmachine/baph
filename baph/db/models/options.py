@@ -20,19 +20,16 @@ get_verbose_name = lambda class_name: \
     re.sub('(((?<=[a-z])[A-Z])|([A-Z](?![A-Z]|$)))', ' \\1', class_name) \
         .lower().strip()
 
+DEFAULT_ACTIONS = ['add', 'view', 'edit', 'delete']
 DEFAULT_NAMES = ('verbose_name', 'verbose_name_plural', 
                  'app_label', 'swappable', 'auto_created',
                  'cache_detail_keys', 'cache_list_keys', 'cache_pointers',
                  'cache_relations', 'cache_cascades', 
                  'permissions', 'permission_scopes', 'form_class',
-                 )
-'''                 
                  'permission_actions', 'permission_classes',
-                 'permission_parents', 'permission_values',
-                 'permission_column', 'permission_terminator',
-                 'permission_pk_kwarg')
-'''
-#DEFAULT_ACTIONS = ['add', 'view', 'edit', 'delete']
+                 'permission_parents', 'permission_full_parents', 
+                 'permission_values', 'permission_terminator',
+                 )
 
 class Options(object):
     def __init__(self, meta, app_label=None):
@@ -72,21 +69,20 @@ class Options(object):
         # invalidations. Use this when an object is cached as a subobject of
         # a larger cache, to signal the parent that it needs to recache
         self.cache_cascades = []
-        '''
+
         self.permission_actions = []
         self.permission_classes = []
         self.permission_parents = []
-        self.permission_values = {}
+        self.permission_full_parents = []
         self.permission_terminator = False
-        self.permission_column = None
-        self.permission_pk_kwarg = None
-        '''
+        self.permission_values = {}
+
         self.limit = 1000
+        self.object_name, self.app_label = None, app_label
         self.model_name, self.model_name_plural = None, None
         self.verbose_name, self.verbose_name_plural = None, None
         self.permissions = {}
         self.permission_scopes = {}
-        self.object_name, self.app_label = None, app_label
         self.pk = None
         self.form_class = None
         self.meta = meta
@@ -102,16 +98,18 @@ class Options(object):
             in settings.INSTALLED_APPS
         # First, construct the default values for these options.
         self.object_name = cls.__name__
-        self.model_name = self.object_name.lower()
-        self.model_name_plural = self.model_name + 's'
         self.verbose_name = get_verbose_name(self.object_name)
-        '''
+        if not self.model_name:
+            self.model_name = self.object_name.lower()
+            self.model_name_plural = self.model_name + 's'
+
         # permission-related stuff
         for action in DEFAULT_ACTIONS:
             if not action in self.permission_actions:
                 self.permission_actions.append(action)
         if not self.permission_classes:
             self.permission_classes = [self.model_name]
+        '''
         if hasattr(cls, '__mapper__') and len(cls.__mapper__.primary_key) == 1:
             if not self.permission_pk_kwarg:
                 self.permission_pk_kwarg = '%s_id' % self.model_name

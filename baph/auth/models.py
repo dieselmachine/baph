@@ -44,6 +44,7 @@ from sqlalchemy.ext.declarative import declared_attr, clsregistry
 from sqlalchemy.ext.declarative.base import _add_attribute
 from sqlalchemy.orm import synonym, relationship, backref, RelationshipProperty
 
+from baph.auth.mixins import UserPermissionMixin
 from baph.db.models import Model
 from baph.db.orm import ORM, Base
 from baph.db.types import UUID, Dict, List
@@ -104,7 +105,7 @@ exec inspect.getsource(check_password)
 
 
 # permission classes
-
+'''
 class Permission(Base, Model):
     __tablename__ = 'baph_auth_permissions'
     __table_args__ = {
@@ -120,7 +121,7 @@ class Permission(Base, Model):
 
 '''
 class Permission(Base, Model):
-    __tablename__ = 'baph_permissions'
+    __tablename__ = 'baph_auth_permission'
     __table_args__ = {
         'info': {'preserve_during_flush': True},
         }
@@ -134,7 +135,6 @@ class Permission(Base, Model):
     value = Column(String(100))
     base_class = Column(String(50), index=True)
 '''
-
 class PermissionStruct:
     def __init__(self, **entries): 
         self.__dict__.update(entries)
@@ -228,6 +228,7 @@ class PermissionMixin(object):
         if action:
             perms = perms.get(action, {})
         return perms
+'''
 
 # organization classes
 
@@ -237,6 +238,7 @@ class AbstractBaseOrganization(Base):
 
 class BaseOrganization(AbstractBaseOrganization):
     __tablename__ = 'baph_auth_organizations'
+    __requires_subclass__ = True
     name = Column(Unicode(200), nullable=False)
 
 class Organization(BaseOrganization):
@@ -258,21 +260,23 @@ class AbstractBaseGroup(Base):
 
 class BaseGroup(AbstractBaseGroup):
     __tablename__ = 'baph_auth_groups'
+    __requires_subclass__ = True
     name = Column(Unicode(100), nullable=False)
     
 class Group(BaseGroup):
     class Meta:
+        permission_parents = [Organization._meta.model_name]
         swappable = 'BAPH_GROUP_MODEL'
 
 setattr(BaseGroup, Organization._meta.model_name+'_id',
     Column(Integer, ForeignKey(Organization.id), index=True))
 setattr(BaseGroup, Organization._meta.model_name,
     RelationshipProperty(Organization, backref=Group._meta.model_name_plural))
-
+setattr(Group, 'org_key', Organization._meta.model_name+'_id')
 
 # user classes
 
-class AbstractBaseUser(Base):
+class AbstractBaseUser(Base, UserPermissionMixin):
     __abstract__ = True
     id = _generate_user_id_column()
     password = Column(String(256), nullable=False)
@@ -330,9 +334,9 @@ class AbstractBaseUser(Base):
         self.password = UNUSABLE_PASSWORD
 
 
-
-class BaseUser(AbstractBaseUser, PermissionMixin):
+class BaseUser(AbstractBaseUser):
     __tablename__ = 'auth_user'
+    __requires_subclass__ = True
     username = Column(Unicode(75), nullable=False, unique=True)
     first_name = Column(Unicode(30), nullable=True)
     last_name = Column(Unicode(30), nullable=True)
@@ -414,7 +418,7 @@ setattr(BaseUser, Organization._meta.model_name+'_id',
     Column(Integer, ForeignKey(Organization.id), index=True))
 setattr(BaseUser, Organization._meta.model_name,
     RelationshipProperty(Organization, backref=User._meta.model_name_plural))
-
+setattr(User, 'org_key', Organization._meta.model_name+'_id')
 
 # association classes
 
@@ -422,9 +426,12 @@ class UserGroup(Base, Model):
     '''User groups'''
     __tablename__ = 'baph_auth_user_groups'
     __table_args__ = (
-        Index('idx_group_context', 'group_id', 'key', 'value'),
+        Index('idx_group_context', 'user_id', 'group_id', 'key', 'value'),
         Index('idx_context', 'key', 'value'),
         )
+
+    class Meta:
+        permission_full_parents = ['user']
 
     user_id = Column(Integer, ForeignKey(User.id), primary_key=True,
         autoincrement=False)

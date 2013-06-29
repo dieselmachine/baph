@@ -144,10 +144,6 @@ class CacheMixin(object):
                 changed_keys.append(attr.key)
         self_updated = bool(changed_keys) or deleted
 
-        #print '\nself:', self
-        #print '\tself_updated:', self_updated, changed_keys
-        #print '\tchild_updated:', child_updated
-
         if not self_updated and not child_updated:
             return (cache_keys, version_keys)
 
@@ -237,7 +233,16 @@ class CacheMixin(object):
                 cache.set(key, 1)
             else:
                 cache.incr(key)
-                
+
+def column_to_attr(cls, col):
+    for attr_ in inspect(cls).all_orm_descriptors:
+        try:
+            if col in attr_.property.columns:
+                return attr_
+        except:
+            pass    
+    return None
+
 class ModelPermissionMixin(object):
 
     def get_context(self):
@@ -268,29 +273,30 @@ class ModelPermissionMixin(object):
         keys = []
         cls_name = cls.__name__
 
+        if len(cls.__mapper__.primary_key) == 1:
+            primary_key = cls.__mapper__.primary_key[0].key
+        else:
+            primary_key = None
+
         # add permission for unrestricted access
         keys.append( ('any', None, None, None, cls_name) )
 
         # add permission for single instance access
-        if len(cls.__mapper__.primary_key) == 1:
-            col_key = cls._meta.permission_column # or (cls.__name__.lower() + '_id')
-            #key = cls.__mapper__.primary_key[0].key
-            key = cls._meta.permission_column or cls.__mapper__.primary_key[0].key
-            kwarg = cls._meta.permission_pk_kwarg or key
-            value = '%%(%s)s' % kwarg
-            keys.append( ('single', key, value, col_key, cls_name) )
+        if primary_key:
+            col_key = '%s_%s' % (cls._meta.model_name, primary_key)
+            value = '%%(%s)s' % col_key
+            keys.append( ('single', primary_key, value, col_key, cls_name) )
 
-        for k,v in cls._meta.permission_values.items():
-            active = v.get(remote_key, v.values()[0])
-            #key = cls.__mapper__.primary_key[0].key
-            key = cls._meta.permission_column or cls.__mapper__.primary_key[0].key
-            keys.append( (k, key, active, None, cls_name) )
+        for limiter, pairs in cls._meta.permission_values.items():
+            col_key = None
+            value = pairs[remote_key or primary_key]
+            keys.append( (limiter, primary_key, value, col_key, cls_name) )
 
         if not include_parents:
             return keys
 
         fks = []
-        for key in cls._meta.permission_parents:
+        for key in cls._meta.permission_parents + cls._meta.permission_full_parents:
             attr = getattr(cls, key)
             if not attr.is_attribute:
                 continue
@@ -304,6 +310,7 @@ class ModelPermissionMixin(object):
 
             sub_cls = prop.argument
             col = prop.local_remote_pairs[0][0]
+            col_attr = column_to_attr(cls, col)
             remote_col = prop.local_remote_pairs[0][1]
 
             if type(sub_cls) == type(lambda x:x):
@@ -312,17 +319,19 @@ class ModelPermissionMixin(object):
             if hasattr(sub_cls, 'is_mapper') and sub_cls.is_mapper:
                 # we found a mapper, grab the class from it
                 sub_cls = sub_cls.class_
-            inc_par = sub_cls._meta.permission_terminator == False
+            inc_par = sub_cls._meta.permission_terminator == False or \
+                      key in cls._meta.permission_full_parents
             sub_fks = sub_cls.get_fks(include_parents=inc_par,
                                       remote_key=remote_col.key)
-
+            
             for limiter, key_, value, col_key, base_cls in sub_fks:
                 if not key_:
+                    # do not extend the 'any' permission
                     continue
                 key_ = '%s.%s' % (key, key_)
                 if limiter == 'single' or not col_key:
-                    col_key = col.key
-                    attr = getattr(cls, col.key, None)
+                    col_key = col_attr.key
+                    attr = getattr(cls, col_attr.key, None)
                     if not isinstance(attr, RelationshipProperty):
                         # the column is named differently from the attr
                         for k,v in cls.__mapper__.all_orm_descriptors.items():
@@ -337,7 +346,5 @@ class ModelPermissionMixin(object):
                     #print 'single limiter', key_, col_key
                     limiter = key_.split('.')[-2]
                     value = '%%(%s)s' % col_key
-                    #print '\t', limiter, value
-                    #print 'out:', (limiter, key_, value, col_key, cls_name)
                 keys.append( (limiter, key_, value, col_key, cls_name) )
         return keys

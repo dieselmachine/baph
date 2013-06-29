@@ -108,6 +108,8 @@ class ModelBase(type):
 
     def __new__(cls, name, bases, attrs):
         #print '%s.__new__(%s)' % (name, cls)
+        req_sub = attrs.pop('__requires_subclass__', False)
+
         super_new = super(ModelBase, cls).__new__
 
         parents = [b for b in bases if isinstance(b, ModelBase) and
@@ -145,7 +147,7 @@ class ModelBase(type):
 
         if new_class._meta.swappable:
             if not new_class._meta.swapped:
-                # class is swappable, not hasn't been swapped out, so we create
+                # class is swappable, but hasn't been swapped out, so we create
                 # an alias to the base class, rather than trying to create a new
                 # class under a second name
                 base_cls  = bases[0]
@@ -222,6 +224,12 @@ class ModelBase(type):
             elif isinstance(attr.property, RelationshipProperty):
                 prop = attr.property
             yield (key, prop)
+
+    @property
+    def resource_name(cls):
+        if cls.__mapper__.polymorphic_on is not None:
+            return cls.__mapper__.primary_base_mapper.class_._meta.model_name
+        return cls._meta.model_name
 
 
 Base = declarative_base(cls=Model, 
