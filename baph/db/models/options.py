@@ -11,7 +11,6 @@ from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
 from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 
-from baph.db.models.fields import ModelField
 from baph.db import types
 from baph.utils.functional import cached_property
 
