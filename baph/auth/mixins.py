@@ -28,6 +28,49 @@ def column_to_attr(cls, col):
             pass    
     return None
 
+def key_to_value(obj, key):
+    frags = key.split('.')
+    col_key = frags.pop()
+    current_obj = obj
+
+    while frags:
+        if not current_obj:
+            # we weren't able to follow the chain back, one of the 
+            # fks was probably optional, and had no value
+            return None
+        
+        attr_name = frags.pop(0)
+        previous_obj = current_obj
+        previous_cls = type(previous_obj)
+        current_obj = getattr(previous_obj, attr_name)
+        if current_obj:
+            # proceed to next step of the chain
+            continue
+
+        # relation was empty, we'll grab the fk and lookup the
+        # object manually
+        attr = getattr(previous_cls, attr_name)
+        prop = attr.property
+
+        related_cls = prop.argument
+        if isinstance(related_cls, type(lambda x:x)):
+            related_cls = related_cls()
+        related_col = prop.local_remote_pairs[0][0]
+        attr_ = column_to_attr(previous_cls, related_col)
+        related_key = attr_.key
+        related_val = getattr(previous_obj, related_key)
+        if related_val is None:
+            # relation and key are both empty: no parent found
+            return None
+
+        session = orm.sessionmaker()
+        current_obj = session.query(related_cls).get(related_val)
+
+    value = getattr(current_obj, col_key, None)
+    if value:
+        return str(value)
+    return None
+
 class UserPermissionMixin(object):
 
     def get_user_permissions(self):
@@ -70,7 +113,13 @@ class UserPermissionMixin(object):
                     perms[model_name][perm.action] = set()
                 perm = PermissionStruct(**perm.to_dict())
                 if perm.value:
-                    perm.value = perm.value % ctx
+                    try:
+                        perm.value = perm.value % ctx
+                    except KeyError as e:
+                        raise Exception('Key %s not found in permission '
+                            'context. If this is a single-value permission, '
+                            'ensure the key and value are present on the '
+                            'UserGroup association object.' % str(e))
                 perms[model_name][perm.action].add(perm)
         return permissions
 
@@ -162,49 +211,13 @@ class UserPermissionMixin(object):
                     perm_map[col_attr.key] = set([None])
 
         for k,v in perm_map.items():
-            frags = k.split('.')
-            col_name = frags.pop()
-            current_obj = obj
-            while frags:
-                attr_name = frags.pop(0)
-                previous_obj = current_obj
-                if not previous_obj:
-                    break
-                current_obj = getattr(previous_obj, attr_name)
-                if current_obj is None:
-                    # relation was empty, let's try manually grabbing via pk
-                    attr = getattr(type(previous_obj), attr_name)
-                    prop = attr.property
-                    rel_cls = prop.argument
-                    if isinstance(rel_cls, type(lambda x: x)):
-                        rel_cls = rel_cls()
-                    rel_col = prop.local_remote_pairs[0][0]
-                    rel_key = rel_col.key
-                    # we need to find the attr which refers to this column
-                    # TODO: is there a better way?
-                    for attr_ in inspect(type(previous_obj)).all_orm_descriptors:
-                        try:
-                            if rel_col in attr_.property.columns:
-                                rel_key = attr_.key
-                                break
-                        except:
-                            pass
-                    rel_val = getattr(previous_obj, rel_key, None)
-                    if rel_val is None:
-                        # relation and key are both empty: no parent found
-                        continue
-                    else:
-                        session = orm.sessionmaker()
-                        current_obj = session.query(rel_cls).get(rel_val)
+            keys = k.split(',')
+            key_pieces = [key_to_value(obj, key) for key in keys]
+            if key_pieces == [None]:
+                value = None
+            else:
+                value = ','.join(key_pieces)
 
-            if not current_obj:
-                continue
-
-            # now grab final value
-            if not hasattr(current_obj, col_name):
-                continue
-
-            value = getattr(current_obj, col_name)
             if action == 'add':
                 # for adding items, all filters must match
                 if value and str(value) not in v:
@@ -215,5 +228,5 @@ class UserPermissionMixin(object):
                 # for other actions, one relevant perm is enough
                 if value and str(value) in v:
                     return True
-            
+
         return action == 'add'

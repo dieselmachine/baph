@@ -289,7 +289,11 @@ class ModelPermissionMixin(object):
 
         for limiter, pairs in cls._meta.permission_values.items():
             col_key = None
-            value = pairs[remote_key or primary_key]
+            new_key = remote_key or primary_key
+            if new_key in pairs:
+                value = pairs[new_key]
+            else:
+                primary_key, value = pairs.items()[0]
             keys.append( (limiter, primary_key, value, col_key, cls_name) )
 
         if not include_parents:

@@ -1,5 +1,7 @@
 import types
 
+from sqlalchemy import and_
+
 from baph.db.orm import Base
 
 
