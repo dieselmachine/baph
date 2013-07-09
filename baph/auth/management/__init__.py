@@ -28,10 +28,13 @@ def _get_permission_codename(action, opts, label=None):
     return slugify(codename.replace(' ','_'))
 
 def _get_all_permissions(opts):
+    perms = []
     classes = opts.permission_classes
     actions = opts.permission_actions
+    handler = opts.permission_handler
+    if handler or not classes or not actions:
+        return perms
     fks = opts.model.get_fks()
-    perms = []
     for klass in classes:
         for action in actions:
             for limiter, key, value, rel_key, base_class in fks:

@@ -105,23 +105,9 @@ exec inspect.getsource(check_password)
 
 
 # permission classes
-'''
+
 class Permission(Base, Model):
     __tablename__ = 'baph_auth_permissions'
-    __table_args__ = {
-        'info': {'preserve_during_flush': True},
-        }
-    id = Column(Integer, primary_key=True)
-    name = Column(Unicode(100))
-    codename = Column(String(100), unique=True)
-    resource = Column(String(50))
-    action = Column(String(16))
-    key = Column(String(100))
-    value = Column(String(50))
-
-'''
-class Permission(Base, Model):
-    __tablename__ = 'baph_auth_permission'
     __table_args__ = {
         'info': {'preserve_during_flush': True},
         }
@@ -134,101 +120,7 @@ class Permission(Base, Model):
     key = Column(String(200))
     value = Column(String(100))
     base_class = Column(String(50), index=True)
-'''
-class PermissionStruct:
-    def __init__(self, **entries): 
-        self.__dict__.update(entries)
 
-class PermissionMixin(object):
-
-    def get_user_permissions(self):
-        ctx = self.get_context()
-        permissions = {}
-        for assoc in self.permission_assocs:
-            perm = assoc.permission
-            model = string_to_model(perm.resource)
-            model_name = model.__name__ if model else perm.resource
-            if model_name not in permissions:
-                permissions[model_name] = {}
-            if perm.action not in permissions[model_name]:
-                permissions[model_name][perm.action] = set()
-            perm = PermissionStruct(**perm.to_dict())
-            if perm.value:
-                perm.value = perm.value % ctx
-            permissions[model_name][perm.action].add(perm)
-        return permissions
-
-    def get_group_permissions(self):
-        org_key = '%s_id' % Organization._meta.model_name
-        ctx = self.get_context()
-        permissions = {}
-        for user_group in self.groups:
-            if user_group.key:
-                ctx[user_group.key] = user_group.value
-            group = user_group.group
-            org_id = getattr(group, org_key)
-            if org_id not in permissions:
-                permissions[org_id] = {}
-            perms = permissions[org_id]
-            for assoc in group.permission_assocs:
-                perm = assoc.permission
-                model = string_to_model(perm.resource)
-                model_name = model.__name__ if model else perm.resource
-                if model_name not in perms:
-                    perms[model_name] = {}
-                if perm.action not in perms[model_name]:
-                    perms[model_name][perm.action] = set()
-                perm = PermissionStruct(**perm.to_dict())
-                if perm.value:
-                    perm.value = perm.value % ctx
-                perms[model_name][perm.action].add(perm)
-        return permissions
-
-    def get_all_permissions(self):
-        permissions = self.get_group_permissions()
-        user_perms = self.get_user_permissions()
-        if not user_perms:
-            return permissions
-        if not None in permissions:
-            permissions[None] = {}
-        for resource, actions in user_perms.items():
-            if resource not in permissions[None]:
-                permissions[None][resource] = {}
-            for action, perms in actions.items():
-                if action not in permissions[None][resource]:
-                    permissions[None][resource][action] = set()
-                permissions[None][resource][action].update(perms)
-        return permissions
-
-    def get_current_permissions(self):
-        if hasattr(self, '_perm_cache'):
-            return self._perm_cache
-
-        perms = {}
-        for wl, wl_perms in self.get_all_permissions().items():
-            for rsrc, rsrc_perms in wl_perms.items():
-                if not rsrc in perms:
-                    perms[rsrc] = {}
-                for action, action_perms in rsrc_perms.items():
-                    if not action in perms[rsrc]:
-                        perms[rsrc][action] = set()
-                    perms[rsrc][action].update(action_perms)
-        setattr(self, '_perm_cache', perms)
-        return perms
-
-    def get_resource_permissions(self, resource, action=None):
-        if not resource:
-            raise Exception('resource is required for permission filtering')
-        perms = self.get_current_permissions()
-        model = string_to_model(resource)
-        model_name = model.__name__ if model else resource        
-        if model_name not in perms:
-            return set()
-        perms = perms.get(model_name, {})
-        if action:
-            perms = perms.get(action, {})
-        return perms
-'''
 
 # organization classes
 
@@ -265,6 +157,7 @@ class BaseGroup(AbstractBaseGroup):
     
 class Group(BaseGroup):
     class Meta:
+        permission_actions = ['add', 'view', 'edit', 'delete']
         permission_parents = [Organization._meta.model_name]
         swappable = 'BAPH_GROUP_MODEL'
 
@@ -431,6 +324,7 @@ class UserGroup(Base, Model):
         )
 
     class Meta:
+        permission_handler = 'user'
         permission_full_parents = ['user']
 
     user_id = Column(Integer, ForeignKey(User.id), primary_key=True,

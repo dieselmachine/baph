@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from collections import defaultdict
 from importlib import import_module
+from types import FunctionType
 import sys
 
 from django.conf import settings
@@ -16,6 +17,7 @@ from sqlalchemy.orm import mapper, configure_mappers
 from sqlalchemy.orm.attributes import instance_dict, instance_state
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 
+from baph.db import Session
 from baph.db.models.loading import get_model, register_models
 from baph.db.models.mixins import CacheMixin, ModelPermissionMixin
 from baph.db.models.options import Options
@@ -85,6 +87,33 @@ class Model(CacheMixin, ModelPermissionMixin):
     def is_deleted(self):
         return False
 
+    def get_parent(self, attr_name):
+        # first, try grabbing it directly
+        parent = getattr(self, attr_name)
+        if parent:
+            return parent
+            
+        # if nothing was found, grab the fk and lookup manually
+        attr = getattr(type(self), attr_name)
+        prop = attr.property
+        local_col, remote_col = prop.local_remote_pairs[0]
+        local_key = local_col.key
+        value = getattr(self, local_key)
+        if not value:
+            # no relation and no fk
+            return None
+
+        filters = {remote_col.key: value}
+        parent_cls = prop.argument
+        if isinstance(parent_cls, FunctionType):
+            parent_cls = parent_cls()
+        if hasattr(parent_cls, 'is_mapper') and parent_cls.is_mapper:
+            # we found a mapper, grab the class from it
+            parent_cls = parent_cls.class_
+        session = Session()
+        parent = session.query(parent_cls).filter_by(**filters).first()
+        return parent
+
 class ModelBase(type):
 
     def __init__(cls, name, bases, attrs):
@@ -152,6 +181,7 @@ class ModelBase(type):
                 # class under a second name
                 base_cls  = bases[0]
                 base_cls.add_to_class('_meta', new_class._meta)
+                register_models(base_cls._meta.app_label, base_cls)
                 return base_cls
 
             # class has been swapped out
@@ -227,8 +257,11 @@ class ModelBase(type):
 
     @property
     def resource_name(cls):
-        if cls.__mapper__.polymorphic_on is not None:
-            return cls.__mapper__.primary_base_mapper.class_._meta.model_name
+        try:
+            if cls.__mapper__.polymorphic_on is not None:
+                return cls.__mapper__.primary_base_mapper.class_._meta.model_name
+        except:
+            pass
         return cls._meta.model_name
 
 

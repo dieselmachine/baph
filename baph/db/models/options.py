@@ -19,7 +19,6 @@ get_verbose_name = lambda class_name: \
     re.sub('(((?<=[a-z])[A-Z])|([A-Z](?![A-Z]|$)))', ' \\1', class_name) \
         .lower().strip()
 
-DEFAULT_ACTIONS = ['add', 'view', 'edit', 'delete']
 DEFAULT_NAMES = ('verbose_name', 'verbose_name_plural', 
                  'app_label', 'swappable', 'auto_created',
                  'cache_detail_keys', 'cache_list_keys', 'cache_pointers',
@@ -28,6 +27,7 @@ DEFAULT_NAMES = ('verbose_name', 'verbose_name_plural',
                  'permission_actions', 'permission_classes',
                  'permission_parents', 'permission_full_parents', 
                  'permission_values', 'permission_terminator',
+                 'permission_handler',
                  )
 
 class Options(object):
@@ -72,6 +72,7 @@ class Options(object):
         self.permission_actions = []
         self.permission_classes = []
         self.permission_parents = []
+        self.permission_handler = None
         self.permission_full_parents = []
         self.permission_terminator = False
         self.permission_values = {}
@@ -95,19 +96,16 @@ class Options(object):
         self.model = cls
         self.installed = re.sub('\.models$', '', cls.__module__) \
             in settings.INSTALLED_APPS
+
         # First, construct the default values for these options.
         self.object_name = cls.__name__
         self.verbose_name = get_verbose_name(self.object_name)
         if not self.model_name:
             self.model_name = self.object_name.lower()
             self.model_name_plural = self.model_name + 's'
-
-        # permission-related stuff
-        for action in DEFAULT_ACTIONS:
-            if not action in self.permission_actions:
-                self.permission_actions.append(action)
         if not self.permission_classes:
             self.permission_classes = [self.model_name]
+
         '''
         if hasattr(cls, '__mapper__') and len(cls.__mapper__.primary_key) == 1:
             if not self.permission_pk_kwarg:
@@ -181,69 +179,8 @@ class Options(object):
                     return swapped_for
         return None
     swapped = property(_swapped)
+
     '''
-    def kwargs_from_hybrid(self, attr):
-        kwargs = {}
-        expr = attr.expr(self.model)
-        kwargs['data_type'] = type(expr.type)
-        kwargs['readonly'] = not attr.fset
-        return kwargs
-
-    def kwargs_from_column_attr(self, attr):
-        kwargs = {}
-        col = attr.property.columns[0]
-        kwargs['data_type'] = type(col.type)
-        if len(col.proxy_set) == 1:
-            # single column
-            kwargs['auto'] = col.primary_key \
-                and type(col.type) == Integer \
-                and col.autoincrement
-            kwargs['default'] = col.default
-            kwargs['nullable'] = col.nullable
-            kwargs['unique'] = col.unique
-            kwargs['readonly'] = attr.info.get('readonly', False)
-        else:
-            # multiple join elements, make it readonly
-            kwargs['readonly'] = True
-        return kwargs
-
-    def kwargs_from_relation_attr(self, attr):
-        prop = attr.property
-        kwargs = {}
-        data_type = prop.argument
-        if isinstance(data_type, FunctionType):
-            # lazy-loaded attr that hasn't been evaluated yet
-            data_type = data_type()
-        elif getattr(data_type, 'is_mapper', False):
-            data_type = data_type.class_
-
-        data_collection = prop.collection_class
-        if isinstance(data_collection, FunctionType):
-            # lambda-based evaluator, call it and check the type
-            data_collection = type(data_collection())
-
-        kwargs['data_type'] = data_type
-        kwargs['data_collection'] = data_collection
-        kwargs['uselist'] = prop.uselist
-        kwargs['readonly'] = prop.viewonly
-        kwargs['local'] = False
-        return kwargs
-
-    def kwargs_from_proxy(self, key, attr):
-        proxy = getattr(self.model, key)
-        attr = self.get_attr_from_proxy(proxy)
-        prop = attr.property
-        if isinstance(prop, ColumnProperty):
-            kwargs = self.kwargs_from_column_attr(attr)
-        elif isinstance(prop, RelationshipProperty):
-            kwargs = self.kwargs_from_relation_attr(attr)
-        data_collection = proxy.local_attr.property.collection_class
-        if data_collection:
-            data_collection = type(data_collection())
-        kwargs['data_collection'] = data_collection
-        kwargs['local'] = False
-        return kwargs
-
     def _fill_fields_cache(self):
         cache = []
         if not self.model.__mapper__.configured:
@@ -292,9 +229,4 @@ class Options(object):
         except AttributeError:
             self._fill_fields_cache()
         return self._field_name_cache
-
-    def get_attr_from_proxy(cls, proxy):
-        if proxy.remote_attr.extension_type == ASSOCIATION_PROXY:
-            return cls.get_attr_from_proxy(proxy.remote_attr)
-        return proxy.remote_attr
     '''

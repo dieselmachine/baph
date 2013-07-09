@@ -33,6 +33,7 @@ class AppCache(object):
         postponed=[],
         nesting_level=0,
         _get_models_cache={},
+        resource_map={},
     )
 
     def __init__(self):
@@ -250,6 +251,7 @@ class AppCache(object):
                 if os.path.splitext(fname1)[0] == os.path.splitext(fname2)[0]:
                     continue
             model_dict[model_name] = model
+            self.resource_map[model.resource_name] = model
         self._get_models_cache.clear()
 
     def unregister_models(self, app_label, *models):

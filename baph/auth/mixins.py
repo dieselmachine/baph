@@ -1,6 +1,7 @@
 from sqlalchemy import inspect
 from sqlalchemy.orm.util import identity_key
 
+from baph.db.models.loading import cache
 from baph.db.orm import Base, ORM
 
 
@@ -156,10 +157,20 @@ class UserPermissionMixin(object):
         return perms
 
     def get_resource_permissions(self, resource, action=None):
-        if resource and not action:
-            assert False
         if not resource:
             raise Exception('resource is required for permission filtering')
+        if resource in cache.resource_map:
+            # all resources based on Models will be present in the appcache
+            # we grab the Model and check if the perm is being routed to its
+            # parent
+            cls = cache.resource_map[resource]
+            if cls._meta.permission_handler:
+                resource = cls._meta.permission_handler
+                action = action if action == 'view' else 'edit'
+        else:
+            # virtual resources (defined via meta.permission_classes) will not
+            # have an entry in the resource_map, these permissions cannot be
+            # routed to a parent, so should exist in user perms already
         perms = self.get_current_permissions()
         if resource not in perms:
             return set()
@@ -190,6 +201,18 @@ class UserPermissionMixin(object):
         #print 'has_obj_perm', resource, action, obj, obj.__dict__
         #resource = obj.__class__._meta.model_name
         # TODO: auto-generate resource by checking base_mapper of polymorphics
+
+        if type(obj)._meta.permission_handler:
+            # permissions for this object are based off parent object
+            parent_obj = obj.get_parent(type(obj)._meta.permission_handler)
+            if not parent_obj:
+                # nothing to check perms against, assume True
+                return True
+            parent_res = type(parent_obj).resource_name
+            if action != 'view':
+                action = 'edit'
+            return self.has_obj_perm(parent_res, action, parent_obj)
+
         ctx = self.get_context()
         perms = self.get_resource_permissions(resource, action)
         if not perms:
