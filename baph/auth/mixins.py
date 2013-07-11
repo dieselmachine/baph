@@ -171,6 +171,7 @@ class UserPermissionMixin(object):
             # virtual resources (defined via meta.permission_classes) will not
             # have an entry in the resource_map, these permissions cannot be
             # routed to a parent, so should exist in user perms already
+            pass
         perms = self.get_current_permissions()
         if resource not in perms:
             return set()
