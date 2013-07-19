@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import absolute_import
 '''\
 :mod:`baph.utils.collections` -- Custom container data types
 ============================================================
@@ -10,8 +11,6 @@
 
 .. _ordereddict: http://pypi.python.org/pypi/ordereddict
 '''
-
-from __future__ import absolute_import
 
 from .importing import import_any_attr
 from collections import defaultdict

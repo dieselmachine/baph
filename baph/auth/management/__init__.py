@@ -5,7 +5,6 @@ import unicodedata
 
 from django.core import exceptions
 from django.core.management.base import CommandError
-from django.db import DEFAULT_DB_ALIAS, router
 from django.utils.encoding import DEFAULT_LOCALE_ENCODING
 try:
     from django.utils.text import slugify
@@ -14,13 +13,12 @@ except:
 from sqlalchemy.ext.declarative import has_inherited_table
 
 from baph.auth import models as auth_app #, get_user_model
+from baph.db import Session, DEFAULT_DB_ALIAS
 from baph.db.models import get_models
-from baph.db.orm import Base, ORM
+from baph.db.orm import Base
 #from baph.db import Session
 #from baph.db.models import signals, get_models
 
-
-orm = ORM.get()
 
 def _get_permission_codename(action, opts, label=None):
     label = label if label else opts.model_name
@@ -90,7 +88,7 @@ def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
             searched_perms.append(perm)
             searched_codenames.add(perm.codename)
 
-    session = orm.sessionmaker()    
+    session = Session()    
     all_perms = session.query(auth_app.Permission).all()
     all_codenames = set(p.codename for p in all_perms)
 
@@ -104,3 +102,78 @@ def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
     if verbosity >= 2:
         for perm in perms:
             print("Adding permission '%s:%s'" % (perm.resource, perm.codename))
+
+def create_superuser(app, created_models, verbosity, db, **kwargs):
+    from baph.auth.models import User as UserModel
+    from django.core.management import call_command
+    
+    if UserModel in created_models and kwargs.get('interactive', True):
+        msg = ("\nYou just installed Baph's auth system, which means you "
+            "don't have any superusers defined.\nWould you like to create one "
+            "now? (yes/no): ")
+        confirm = input(msg)
+        while 1:
+            if confirm not in ('yes', 'no'):
+                confirm = input('Please enter either "yes" or "no": ')
+                continue
+            if confirm == 'yes':
+                call_command("createsuperuser", interactive=True, database=db)
+            break
+
+def get_system_username():
+    """
+    Try to determine the current system user's username.
+
+    :returns: The username as a unicode string, or an empty string if the
+        username could not be determined.
+    """
+    try:
+        result = getpass.getuser()
+    except (ImportError, KeyError):
+        # KeyError will be raised by os.getpwuid() (called by getuser())
+        # if there is no corresponding entry in the /etc/passwd file
+        # (a very restricted chroot environment, for example).
+        return ''
+    try:
+        result = result.decode(DEFAULT_LOCALE_ENCODING)
+    except UnicodeDecodeError:
+        # UnicodeDecodeError - preventive treatment for non-latin Windows.
+        return ''
+    return result
+
+def get_default_username(check_db=True):
+    """
+    Try to determine the current system user's username to use as a default.
+
+    :param check_db: If ``True``, requires that the username does not match an
+        existing ``auth.User`` (otherwise returns an empty string).
+    :returns: The username, or an empty string if no username can be
+        determined.
+    """
+    default_username = get_system_username()
+    try:
+        default_username = unicodedata.normalize('NFKD', default_username)\
+            .encode('ascii', 'ignore').decode('ascii').replace(' ', '').lower()
+    except UnicodeDecodeError:
+        return ''
+
+    # Run the username validator
+    # TODO: per-field validation
+    #try:
+    #    auth_app.User._meta.get_field('username').run_validators(default_username)
+    #except exceptions.ValidationError:
+    #    return ''
+
+    # Don't return the default username if it is already taken.
+    if check_db and default_username:
+        session = Session()
+        user = session.query(auth_app.User).filter_by(username=default_username).first()
+        if user:
+            return ''
+
+    return default_username
+
+#signals.post_syncdb.connect(create_permissions,
+#    dispatch_uid="django.contrib.auth.management.create_permissions")
+#signals.post_syncdb.connect(create_superuser,
+#    sender=auth_app, dispatch_uid="django.contrib.auth.management.create_superuser")

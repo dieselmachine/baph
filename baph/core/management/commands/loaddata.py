@@ -13,15 +13,12 @@ from optparse import make_option
 from django.conf import settings
 from django.core import serializers
 from django.core.management.color import no_style
-from django.db import connections, router, transaction, DEFAULT_DB_ALIAS
-from django.db.models import get_apps
 from django.utils.itercompat import product
 
 from baph.core.management.base import BaseCommand
-from baph.db.orm import ORM
+from baph.db import Session, DEFAULT_DB_ALIAS
+from baph.db.models import get_apps
 
-
-orm = ORM.get()
 
 class Command(BaseCommand):
     help = 'Installs the named fixture(s) in the database.'
@@ -39,7 +36,8 @@ class Command(BaseCommand):
         show_traceback = options.get('traceback', False)
         commit = options.get('commit', True)
         self.style = no_style()
-        session = orm.sessionmaker()
+        session = Session()
+        session.expunge_all()
 
         # Keep a count of the installed objects and fixtures
         fixture_count = 0

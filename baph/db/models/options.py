@@ -12,6 +12,7 @@ from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 
 from baph.db import types
+from baph.db.models.fields import ModelField
 from baph.utils.functional import cached_property
 
 
@@ -106,13 +107,6 @@ class Options(object):
         if not self.permission_classes:
             self.permission_classes = [self.model_name]
 
-        '''
-        if hasattr(cls, '__mapper__') and len(cls.__mapper__.primary_key) == 1:
-            if not self.permission_pk_kwarg:
-                self.permission_pk_kwarg = '%s_id' % self.model_name
-        else:
-            self.permission_pk_kwarg = None
-        '''
         # Next, apply any overridden values from 'class Meta'.
         if getattr(self, 'meta', None):
             meta_attrs = self.meta.__dict__.copy()
@@ -135,7 +129,8 @@ class Options(object):
 
             # Any leftover attributes must be invalid.
             if meta_attrs != {}:
-                raise TypeError("'class Meta' got invalid attribute(s): %s" % ','.join(meta_attrs.keys()))
+                raise TypeError("'class Meta' got invalid attribute(s): %s" 
+                    % ','.join(meta_attrs.keys()))
             del self.meta
         else:
             self.verbose_name_plural = string_concat(self.verbose_name, 's')
@@ -180,7 +175,6 @@ class Options(object):
         return None
     swapped = property(_swapped)
 
-    '''
     def _fill_fields_cache(self):
         cache = []
         if not self.model.__mapper__.configured:
@@ -191,15 +185,13 @@ class Options(object):
             elif attr.extension_type == HYBRID_METHOD:
                 continue
             elif attr.extension_type == HYBRID_PROPERTY:
-                kwargs = self.kwargs_from_hybrid(attr)
+                field = ModelField.from_hybrid(key, attr)
             elif attr.extension_type == ASSOCIATION_PROXY:
-                kwargs = self.kwargs_from_proxy(key, attr)
+                field = ModelField.from_proxy(key, attr, model=self.model)
             elif isinstance(attr.property, ColumnProperty):
-                kwargs = self.kwargs_from_column_attr(attr)
+                field = ModelField.from_column(key, attr)
             elif isinstance(attr.property, RelationshipProperty):
-                kwargs = self.kwargs_from_relation_attr(attr)
-                
-            field = ModelField(key, **kwargs)
+                field = ModelField.from_relationship(key, attr)
             cache.append((key, field))
         self._field_cache = tuple(cache)
         self._field_name_cache = [x for x, _ in cache]
@@ -229,4 +221,14 @@ class Options(object):
         except AttributeError:
             self._fill_fields_cache()
         return self._field_name_cache
-    '''
+
+    def get_field(self, name, many_to_many=True):
+        """
+        Returns the requested field by name. Raises FieldDoesNotExist on error.
+        """
+        to_search = self.fields #(self.fields + self.many_to_many) if many_to_many else self.fields
+        for f in to_search:
+            if f[0] == name:
+                return f[1]
+        raise FieldDoesNotExist('%s has no field named %r' % (self.object_name, name))
+

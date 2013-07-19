@@ -22,19 +22,15 @@ import random
 import urllib
 import uuid
 
-from baph.utils.importing import import_attr
 from django.conf import settings
-(AnonymousUser, check_password, SiteProfileNotAvailable,
- UNUSABLE_PASSWORD) = \
-    import_attr(['django.contrib.auth.models'],
-                ['AnonymousUser', 'check_password',
-                 'SiteProfileNotAvailable', 'UNUSABLE_PASSWORD'])
+
 from django.core.exceptions import ImproperlyConfigured
 try:
     # global variable needed for django 1.3
     from django.utils.crypto import constant_time_compare
 except:
     pass
+from django.utils import timezone
 from django.utils.encoding import smart_str
 from django.utils.importlib import import_module
 from django.utils.translation import ugettext as _
@@ -45,14 +41,17 @@ from sqlalchemy.ext.declarative.base import _add_attribute
 from sqlalchemy.orm import synonym, relationship, backref, RelationshipProperty
 
 from baph.auth.mixins import UserPermissionMixin
+from baph.auth.utils import get_datetime_now
+from baph.db import Session
 from baph.db.models import Model
-from baph.db.orm import ORM, Base
-from baph.db.types import UUID, Dict, List
+from baph.db.orm import Base
+from baph.db.types import UUID, Dict, List, TZAwareDateTime
 from baph.utils.strings import random_string
+from baph.auth.hashers import check_password, make_password, is_password_usable, identify_hasher
+from baph.utils.importing import import_attr
+
 import inspect
 
-
-orm = ORM.get()
 
 AUTH_USER_FIELD_TYPE = getattr(settings, 'AUTH_USER_FIELD_TYPE', 'UUID')
 AUTH_USER_FIELD = UUID if AUTH_USER_FIELD_TYPE == 'UUID' else Integer
@@ -84,7 +83,7 @@ def update_last_login(sender, user, **kwargs):
     user.save(update_fields=['last_login'])
 
 def get_or_fail(codename):
-    session = orm.sessionmaker()
+    session = Session()
     try:
         perm = session.query(Permission).filter_by(codename=codename).one()
     except:
@@ -101,7 +100,7 @@ def string_to_model(string):
         return None
 
 # fun with monkeypatching
-exec inspect.getsource(check_password)
+#exec inspect.getsource(check_password)
 
 
 # permission classes
@@ -127,6 +126,11 @@ class Permission(Base, Model):
 class AbstractBaseOrganization(Base):
     __abstract__ = True
     id = Column(Integer, primary_key=True)
+
+    @classmethod
+    def get_current(cls):
+        raise NotImplemented('get_current must be defined on the '
+            'custom Organization model')
 
 class BaseOrganization(AbstractBaseOrganization):
     __tablename__ = 'baph_auth_organizations'
@@ -169,32 +173,49 @@ setattr(Group, 'org_key', Organization._meta.model_name+'_id')
 
 # user classes
 
+class AnonymousUser(object):
+    id = None
+    email = None
+    username = ''
+    is_staff = False
+    is_active = False
+    is_superuser = False
+    
+    def is_anonymous(self):
+        return True
+
+    def is_authenticated(self):
+        return False
+
+    def has_resource_perm(self, resource):
+        return False
+
 class AbstractBaseUser(Base, UserPermissionMixin):
     __abstract__ = True
     id = _generate_user_id_column()
+    email = Column(String(settings.EMAIL_FIELD_LENGTH), index=True,
+                    nullable=False)
     password = Column(String(256), nullable=False)
-    last_login = Column(DateTime, default=datetime.now, nullable=False,
-                        onupdate=datetime.now)
-    is_active = True
+    last_login = Column(TZAwareDateTime(tz=settings.TIME_ZONE),
+                        default=get_datetime_now, nullable=False, 
+                        onupdate=get_datetime_now)
+    is_staff = Column(Boolean, default=False, nullable=False)
+    is_superuser = Column(Boolean, default=False, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    date_joined = Column(TZAwareDateTime(tz=settings.TIME_ZONE),
+                         default=get_datetime_now, nullable=False)
 
     permissions = association_proxy('permission_assocs', 'permission')
     codenames = association_proxy('permission_assocs', 'codename')
 
-    def check_password(self, raw_password):
-        '''Tests if the password given matches the password of the user.'''
-        if self.password == UNUSABLE_PASSWORD:
-            return False
-        return check_password(raw_password, self.password)
+    # this is to allow the django password reset token generator to work
+    @property
+    def pk(self):
+        return self.id
 
-    @staticmethod
-    def generate_salt(algo='sha1'):
-        '''Generates a salt for generating digests.'''
-        return get_hexdigest(algo, str(random.random()),
-                             str(random.random()))[:5]
-
-    def has_usable_password(self):
-        '''Determines whether the user has a password.'''
-        return self.password != UNUSABLE_PASSWORD
+    def get_username(self):
+        "Return the identifying username for this User"
+        return getattr(self, self.USERNAME_FIELD)
 
     def is_anonymous(self):
         '''Always returns :const:`False`. This is a way of comparing
@@ -222,64 +243,75 @@ class AbstractBaseUser(Base, UserPermissionMixin):
         hsh = get_hexdigest(algo, salt, raw_password)
         self.password = '%s$%s$%s' % (algo, salt, hsh)
 
+    def check_password(self, raw_password):
+        '''Tests if the password given matches the password of the user.'''
+        return check_password(raw_password, self.password)
+
+    @staticmethod
+    def generate_salt(algo='sha1'):
+        '''Generates a salt for generating digests.'''
+        return get_hexdigest(algo, str(random.random()),
+                             str(random.random()))[:5]
+
     def set_unusable_password(self):
         '''Sets a password value that will never be a valid hash.'''
-        self.password = UNUSABLE_PASSWORD
+        self.password = make_password(None)
 
+    def has_usable_password(self):
+        return is_password_usable(self.password)
+
+    # from UserManager
+    
+    @classmethod
+    def normalize_email(cls, email):
+        """
+        Normalize the address by lowercasing the domain part of the email
+        address.
+        """
+        email = email or ''
+        try:
+            email_name, domain_part = email.strip().rsplit('@', 1)
+        except ValueError:
+            pass
+        else:
+            email = '@'.join([email_name, domain_part.lower()])
+        return email
+
+    @classmethod
+    def _create_user(cls, username, email, password, is_staff, is_superuser,
+                     **extra_fields):
+        now = get_datetime_now()#str(timezone.now()).split('.')[0]
+        if not username:
+            raise ValueError('The given username must be set')
+        email = cls.normalize_email(email)
+        user = cls(username=username, email=email, is_staff=is_staff,
+                   is_active=True, is_superuser=is_superuser, 
+                   last_login=now, date_joined=now, **extra_fields)
+        user.set_password(password)
+        session = Session()
+        session.add(user)
+        session.commit()
+        return user
+
+    @classmethod
+    def create_user(cls, username, email=None, password=None, **extra_fields):
+        return cls._create_user(username, email, password, False, False,
+                                 **extra_fields)
+
+    @classmethod
+    def create_superuser(cls, username, email, password, **extra_fields):
+        return cls._create_user(username, email, password, True, True,
+                                 **extra_fields)
 
 class BaseUser(AbstractBaseUser):
     __tablename__ = 'auth_user'
     __requires_subclass__ = True
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = ['email']
+    
     username = Column(Unicode(75), nullable=False, unique=True)
     first_name = Column(Unicode(30), nullable=True)
     last_name = Column(Unicode(30), nullable=True)
-    email = Column(String(settings.EMAIL_FIELD_LENGTH), index=True,
-                    nullable=False)
-    is_staff = Column(Boolean, default=False, nullable=False)
-    is_superuser = Column(Boolean, default=False, nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-    date_joined = Column(DateTime, default=datetime.now, nullable=False)
-
-    @classmethod
-    def create_user(cls, username, email, password=None, session=None,
-                    first_name=None, last_name=None):
-        '''Creates a new User.'''
-        if not session:
-            session = orm.sessionmaker()
-        user = cls(username=username, email=email, first_name=first_name,
-                   last_name=last_name, is_staff=False, is_active=True,
-                   is_superuser=False)
-        if password:
-            user.set_password(password)
-        else:
-            user.set_unusable_password()
-        session.add(user)
-        session.commit()
-        return user
-
-    @classmethod
-    def create_staff(cls, username, email, password, session=None):
-        '''Creates a new User with staff privileges.'''
-        if not session:
-            session = orm.sessionmaker()
-        user = cls(username=username, email=email, is_staff=True,
-                   is_active=True, is_superuser=False)
-        user.set_password(password)
-        session.add(user)
-        session.commit()
-        return user
-
-    @classmethod
-    def create_superuser(cls, username, email, password, session=None):
-        '''Creates a new User with superuser privileges.'''
-        if not session:
-            session = orm.sessionmaker()
-        user = cls(username=username, email=email, is_staff=True,
-                   is_active=True, is_superuser=True)
-        user.set_password(password)
-        session.add(user)
-        session.commit()
-        return user
 
     def email_user(self, subject, message, from_email=None, **kwargs):
         '''Sends an e-mail to this User.'''

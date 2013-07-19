@@ -1,13 +1,13 @@
-from baph.db.utils import ConnectionHandler, load_backend, DEFAULT_DB_ALIAS
 from django.conf import settings
 from django.core import signals
 from django.core.exceptions import ImproperlyConfigured
-from django.db.utils import (ConnectionRouter,
-    DatabaseError, IntegrityError)
+#from django.db.utils import (ConnectionRouter,
+#    DatabaseError, IntegrityError)
 from sqlalchemy.orm import scoped_session, sessionmaker
 
-__all__ = ('backend', 'connection', 'connections', 'router', 'DatabaseError',
-    'IntegrityError', 'DEFAULT_DB_ALIAS')
+from baph.db.utils import ConnectionHandler, load_backend, DEFAULT_DB_ALIAS
+
+__all__ = ('backend', 'connection', 'connections', 'DEFAULT_DB_ALIAS')
 
 
 if settings.DATABASES and DEFAULT_DB_ALIAS not in settings.DATABASES:
@@ -16,7 +16,7 @@ if settings.DATABASES and DEFAULT_DB_ALIAS not in settings.DATABASES:
 
 connections = ConnectionHandler(settings.DATABASES)
 
-router = ConnectionRouter(settings.DATABASE_ROUTERS)
+#router = ConnectionRouter(settings.DATABASE_ROUTERS)
 
 class DefaultConnectionProxy(object):
     """
@@ -32,7 +32,8 @@ class DefaultConnectionProxy(object):
 
 connection = DefaultConnectionProxy()
 engine = connections[DEFAULT_DB_ALIAS]
-Session = scoped_session(sessionmaker(bind=engine))
+engine.echo = getattr(settings, 'BAPH_DB_ECHO', False)
+Session = scoped_session(sessionmaker(bind=engine, autoflush=False))
 
 #
 #print connections['default']

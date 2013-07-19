@@ -13,9 +13,10 @@ from sqlalchemy.ext.declarative.base import (_as_declarative, _add_attribute,
     _MapperConfig)
 from sqlalchemy.ext.declarative.clsregistry import add_class
 from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
-from sqlalchemy.orm import mapper, configure_mappers
+from sqlalchemy.orm import mapper, configure_mappers, object_session
 from sqlalchemy.orm.attributes import instance_dict, instance_state
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
+from sqlalchemy.orm.util import has_identity
 
 from baph.db import Session
 from baph.db.models.loading import get_model, register_models
@@ -82,6 +83,20 @@ class Model(CacheMixin, ModelPermissionMixin):
         for key, value in data.iteritems():
             if hasattr(self, key) and getattr(self, key) != value:
                 setattr(self, key, value)       
+
+    def save(self, update_fields=[]):
+        if has_identity(self):
+            session = object_session(self)
+        else:
+            session = Session()
+            session.add(self)
+        session.commit()
+
+    def delete(self):
+        if has_identity(self):
+            session = object_session(self)
+            session.delete(self)
+            session.commit()
 
     @property
     def is_deleted(self):

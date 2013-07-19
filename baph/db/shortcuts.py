@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
-
-from baph.db.orm import ORM
+from baph.db import Session
 from django.http import Http404
-
-orm = ORM.get()
 
 
 def get_object_or_404(klass, **kwargs):
-    session = kwargs.get('_session', orm.sessionmaker())
+    session = kwargs.get('_session', Session())
     result = session.query(klass) \
                     .filter_by(**kwargs) \
                     .first()

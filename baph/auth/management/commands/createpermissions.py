@@ -10,11 +10,9 @@ from django.utils.importlib import import_module
 from baph.auth.management import create_permissions
 from baph.auth.models import Permission, PermissionAssociation
 from baph.core.management.base import NoArgsCommand, CommandError
+from baph.db import Session
 from baph.db.models import get_apps
-from baph.db.orm import ORM
 
-
-orm = ORM.get()
 
 class Command(NoArgsCommand):
     option_list = NoArgsCommand.option_list + (
@@ -31,7 +29,7 @@ class Command(NoArgsCommand):
 
         if flush:
             # clear existing permissions
-            session = orm.sessionmaker()
+            session = Session()
             session.execute(Permission.__table__.delete())
             session.commit()
         

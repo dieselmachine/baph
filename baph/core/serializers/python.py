@@ -1,12 +1,11 @@
 from django.core.serializers import base
-from django.core.serializers.python import Serializer as _Serializer
-from django.db import DEFAULT_DB_ALIAS
 
+from baph.db import DEFAULT_DB_ALIAS
 from baph.db.models import get_apps
 from baph.db.orm import Base
 
 
-class Serializer(_Serializer):
+class Serializer(base.Serializer):
     pass
 
 def Deserializer(object_list, **options):

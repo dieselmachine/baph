@@ -1,11 +1,10 @@
 from sqlalchemy import inspect
 from sqlalchemy.orm.util import identity_key
 
+from baph.db import Session
 from baph.db.models.loading import cache
-from baph.db.orm import Base, ORM
+from baph.db.orm import Base
 
-
-orm = ORM.get()
 
 def string_to_model(string):
     if string in Base._decl_class_registry:
@@ -64,7 +63,7 @@ def key_to_value(obj, key):
             # relation and key are both empty: no parent found
             return None
 
-        session = orm.sessionmaker()
+        session = Session()
         current_obj = session.query(related_cls).get(related_val)
 
     value = getattr(current_obj, col_key, None)

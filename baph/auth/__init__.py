@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-'''SQLAlchemy versions of :mod:`django.contrib.auth` utility functions.'''
-
 from datetime import datetime
+
 from django.contrib.auth import BACKEND_SESSION_KEY, load_backend, SESSION_KEY
+
+from baph.auth.utils import get_datetime_now
+from baph.db import Session
 
 
 def login(request, user):
@@ -12,16 +14,13 @@ def login(request, user):
     :param user: The user object.
     :type user: :class:`baph.auth.models.User`
     '''
-    if hasattr(request, 'orm'):
-        session = request.orm.sessionmaker()
-    else:
-        from .models import orm
-        session = orm.sessionmaker()
+    session = Session()
     if user is None:
         user = request.user
     # TODO: It would be nice to support different login methods, like signed
     # cookies.
-    user.last_login = datetime.now()
+    user.last_login = get_datetime_now()
+    session.merge(user)
     session.commit()
 
     if SESSION_KEY in request.session:
@@ -58,4 +57,5 @@ def get_user(request):
         user = backend.get_user(user_id) or AnonymousUser()
     except KeyError:
         user = AnonymousUser()
-    return user
+    return user    
+

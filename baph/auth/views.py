@@ -10,25 +10,29 @@ from django.conf import settings
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.tokens import default_token_generator
-from django.contrib.auth.views import (
-    password_reset_complete, password_reset_done)
+#from django.contrib.auth.views import (
+#    password_reset_complete, password_reset_done)
 from django.core.urlresolvers import reverse
 
 from django.http import Http404, HttpResponseRedirect
 from django.utils.http import base36_to_int
 from django.utils.translation import ugettext_lazy as _
+from django.shortcuts import resolve_url
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
+from sqlalchemy.orm.exc import NoResultFound
 import re
 from uuid import UUID
 # avoid shadowing
+
+from baph.db import Session
 from . import login as auth_login, logout as auth_logout
 from .forms import PasswordResetForm, SetPasswordForm
 from .models import User
 
 # fun with monkeypatching
-exec inspect.getsource(password_reset_done)
-exec inspect.getsource(password_reset_complete)
+#exec inspect.getsource(password_reset_done)
+#exec inspect.getsource(password_reset_complete)
 
 
 @csrf_protect
@@ -37,7 +41,6 @@ def login(request, template_name='registration/login.html',
           redirect_field_name=REDIRECT_FIELD_NAME,
           authentication_form=AuthenticationForm):
     '''Displays the login form and handles the login action.'''
-
     redirect_to = request.REQUEST.get(redirect_field_name, '')
 
     if request.method == "POST":
@@ -56,16 +59,9 @@ def login(request, template_name='registration/login.html',
 
             # Okay, security checks complete. Log the user in.
             auth_login(request, form.get_user())
-
-            if request.session.test_cookie_worked():
-                request.session.delete_test_cookie()
-
             return HttpResponseRedirect(redirect_to)
-
     else:
         form = authentication_form(request)
-
-    request.session.set_test_cookie()
 
     return render_to_response(template_name, {
         'form': form,
@@ -90,7 +86,7 @@ def logout(request, next_page=None,
         # Redirect to this page until the session has been cleared.
         return HttpResponseRedirect(next_page or request.path)
 
-
+'''
 @csrf_protect
 def password_reset(request, is_admin_site=False,
                    template_name='registration/password_reset_form.html',
@@ -119,32 +115,69 @@ def password_reset(request, is_admin_site=False,
     return render_to_response(template_name, {
         'form': form,
     }, context_instance=RequestContext(request))
+'''
 
+@csrf_protect
+def password_reset(request, is_admin_site=False,
+                   template_name='registration/password_reset_form.html',
+                   email_template_name='registration/password_reset_email.html',
+                   subject_template_name='registration/password_reset_subject.txt',
+                   password_reset_form=PasswordResetForm,
+                   token_generator=default_token_generator,
+                   post_reset_redirect=None,
+                   from_email=None,
+                   current_app=None,
+                   extra_context=None):
+    if post_reset_redirect is None:
+        post_reset_redirect = reverse('baph.auth.views.password_reset_done')
+    else:
+        post_reset_redirect = resolve_url(post_reset_redirect)
+    if request.method == "POST":
+        form = password_reset_form(request.POST)
+        if form.is_valid():
+            opts = {
+                'use_https': request.is_secure(),
+                'token_generator': token_generator,
+                'from_email': from_email,
+                'email_template_name': email_template_name,
+                'subject_template_name': subject_template_name,
+                'request': request,
+            }
+            if is_admin_site:
+                opts = dict(opts, domain_override=request.get_host())
+            form.save(**opts)
+            return HttpResponseRedirect(post_reset_redirect)
+    else:
+        form = password_reset_form()
+    context = {
+        'form': form,
+    }
+    if extra_context is not None:
+        context.update(extra_context)
+    return render_to_response(template_name, context,
+        context_instance=RequestContext(request))
 
 def password_reset_confirm(request, uidb36=None, token=None,
-                           template_name=None,
+                           template_name='registration/password_reset_confirm.html',
                            token_generator=default_token_generator,
                            set_password_form=SetPasswordForm,
-                           post_reset_redirect=None):
+                           post_reset_redirect=None, extra_context=None):
     '''View that checks the hash in a password reset link and presents a form
     for entering a new password. Doesn't need ``csrf_protect`` since no-one can
     guess the URL.
     '''
     assert uidb36 is not None and token is not None  # checked by URLconf
-    if not template_name:
-        template_name = 'registration/password_reset_confirm.html'
     if post_reset_redirect is None:
         post_reset_redirect = reverse('baph.auth.views.password_reset_complete')
     try:
-        uid = UUID(int=base36_to_int(uidb36))
-    except ValueError:
-        raise Http404
+        uid_int = base36_to_int(uidb36)
+        session = Session()
+        user = session.query(User).get(uid_int)
+    except (ValueError, OverflowError, NoResultFound):
+        user = None
 
-    user = get_object_or_404(User, id=uid)
-    context_instance = RequestContext(request)
-
-    if token_generator.check_token(user, token):
-        context_instance['validlink'] = True
+    if user is not None and token_generator.check_token(user, token):
+        validlink = True
         if request.method == 'POST':
             form = set_password_form(user, request.POST)
             if form.is_valid():
@@ -153,7 +186,34 @@ def password_reset_confirm(request, uidb36=None, token=None,
         else:
             form = set_password_form(None)
     else:
-        context_instance['validlink'] = False
+        validlink = False
         form = None
-    context_instance['form'] = form
-    return render_to_response(template_name, context_instance=context_instance)
+    context = {
+        'form': form,
+        'validlink': validlink,
+        }
+    if extra_context is not None:
+        context.update(extra_context)
+    return render_to_response(template_name, context,
+        context_instance=RequestContext(request))
+
+def password_reset_complete(request,
+                            template_name='registration/password_reset_complete.html',
+                            current_app=None, extra_context=None):
+    context = {
+        'login_url': resolve_url(settings.LOGIN_URL)
+    }
+    if extra_context is not None:
+        context.update(extra_context)
+    return render_to_response(template_name, context,
+        context_instance=RequestContext(request))
+
+def password_reset_done(request,
+                        template_name='registration/password_reset_done.html',
+                        current_app=None, extra_context=None):
+    context = {}
+    if extra_context is not None:
+        context.update(extra_context)
+    return render_to_response(template_name, context,
+        context_instance=RequestContext(request))
+

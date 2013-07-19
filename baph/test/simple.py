@@ -13,14 +13,13 @@ from django.utils.module_loading import module_has_submodule
 from sqlalchemy import create_engine
 from sqlalchemy.schema import CreateSchema, DropSchema
 
+from baph.db import Session
 from baph.db.models import get_app, get_apps
-from baph.db.orm import ORM, Base
+from baph.db.orm import Base
 from baph.utils.importing import import_any_module
 #from baph.utils.unittest.loader import TestLoader
 #from baph.utils.unittest.suite import TestSuite
 
-
-orm = ORM.get()
 
 __all__ = ('BaphTestSuiteRunner',)
 
@@ -92,7 +91,7 @@ def build_suite(app_module):
             if len(test._tests) > 0:
                 suite.addTests(test._tests)
         else:
-            test = unittest.TestLoader().loadTestsFromModule(test_module)
+            test = unittest.defaultTestLoader.loadTestsFromModule(test_module)
             if len(test._tests) > 0:
                 suite.addTests(test._tests)
             try:
@@ -195,7 +194,6 @@ class BaphTestSuiteRunner(object):
 
     def build_suite(self, test_labels, extra_tests=None, **kwargs):
         suite = unittest.TestSuite()
-
         if test_labels:
             for label in test_labels:
                 app_name = extract_app_name(label)
@@ -223,12 +221,12 @@ class BaphTestSuiteRunner(object):
             import_any_module(['%s.models' % app], raise_error=False)
 
         # determine which schemas we need
-        default_schema = orm.engine.url.database
+        default_schema = Session.bind.url.database
         schemas = set(t.schema or default_schema \
             for t in Base.metadata.tables.values())
 
         # get a list of already-existing schemas
-        new_url = str(orm.engine.url).rsplit('/',1)[0]
+        new_url = str(Session.bind.url).rsplit('/',1)[0]
         self.engine = create_engine(new_url)
         conn = self.engine.connect()
         existing_schemas = set(self.engine.dialect.get_schema_names(conn))
@@ -247,8 +245,8 @@ class BaphTestSuiteRunner(object):
             self.engine.execute(CreateSchema(schema))
 
         # create tables
-        if len(orm.metadata.tables) > 0:
-            orm.metadata.create_all()
+        if len(Base.metadata.tables) > 0:
+            Base.metadata.create_all(bind=Session.bind)
 
         # generate permissions
         call_command('createpermissions')

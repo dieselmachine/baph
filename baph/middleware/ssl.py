@@ -12,11 +12,14 @@ Foundation License, version 2 <http://python.org/psf/license/>`_.
 '''
 
 from django.conf import settings
-from django.http import HttpResponseRedirect, get_host
+from django.http import HttpResponseRedirect
 
 SSL = 'SSL'
 
 
+def get_host(request):
+    return request.get_host()
+    
 class SSLRedirect(object):
     '''A middleware that allows you to specify which views require SSL (or
     not) in ``urls.py``. This requires that a settings variable,

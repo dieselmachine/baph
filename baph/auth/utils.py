@@ -1,3 +1,5 @@
+from hashlib import sha1
+import random
 import types
 
 from sqlalchemy import and_
@@ -61,3 +63,40 @@ def perms_to_filters(perms):
         else:
             formatted.append(and_(*filters))
     return formatted
+
+def generate_sha1(string, salt=None):
+    """
+    Generates a sha1 hash for supplied string. Doesn't need to be very secure
+    because it's not used for password checking. We got Django for that.
+
+    :param string:
+        The string that needs to be encrypted.
+
+    :param salt:
+        Optionally define your own salt. If none is supplied, will use a random
+        string of 5 characters.
+
+    :return: Tuple containing the salt and hash.
+
+    """
+    if not salt:
+        salt = sha1(str(random.random())).hexdigest()[:5]
+    hash = sha1(salt+str(string)).hexdigest()
+
+    return (salt, hash)
+
+def get_datetime_now():
+    """
+    Returns datetime object with current point in time.
+
+    In Django 1.4+ it uses Django's django.utils.timezone.now() which returns
+    an aware or naive datetime that represents the current point in time
+    when ``USE_TZ`` in project's settings is True or False respectively.
+    In older versions of Django it uses datetime.datetime.now().
+
+    """
+    try:
+        from django.utils import timezone
+        return timezone.now() # pragma: no cover
+    except ImportError: # pragma: no cover
+        return datetime.datetime.now()
