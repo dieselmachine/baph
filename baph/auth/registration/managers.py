@@ -6,8 +6,10 @@ from baph.auth.models import User, Organization
 from baph.auth.registration import settings as auth_settings
 from baph.auth.registration.models import BaphSignup
 from baph.auth.utils import generate_sha1, get_datetime_now
-from baph.db import Session
+from baph.db.orm import ORM
 
+
+orm = ORM.get()
 
 SHA1_RE = re.compile('^[a-f0-9]{40}$')
 
@@ -21,12 +23,12 @@ class SignupManager(object):
 
         #org_key = Organization._meta.verbose_name
         #org = Organization.get_current()
-
+        #print 'create user:', username, email, password, kwargs
         new_user = User.create_user(username, email, password, **kwargs)
         new_user.is_active = active
         new_user.signup = BaphSignup(activation_key=activation_key)
 
-        session = Session()
+        session = orm.sessionmaker()
         session.add(new_user)
         session.commit()
 
@@ -54,7 +56,7 @@ class SignupManager(object):
         """
         if not SHA1_RE.search(activation_key):
             raise ValueError('Invalid activation key')
-        session = Session()
+        session = orm.sessionmaker()
         signup = session.query(BaphSignup) \
             .filter_by(activation_key=activation_key) \
             .one()
@@ -76,7 +78,7 @@ class SignupManager(object):
 
         """
         if SHA1_RE.search(activation_key):
-            session = Session()
+            session = orm.sessionmaker()
             info = session.query(BaphSignup) \
                 .filter_by(activation_key=activation_key) \
                 .first()
@@ -86,7 +88,7 @@ class SignupManager(object):
                 info.activation_key = auth_settings.BAPH_ACTIVATED
                 user = info.user
                 user.is_active = True
-                session.commit()
+                user.save()
 
                 # Send the activation_complete signal
                 #userena_signals.activation_complete.send(sender=None,
@@ -104,7 +106,7 @@ class SignupManager(object):
             String containing the secret SHA1 activation key.
 
         """
-        session = Session()
+        session = orm.sessionmaker()
         signup = session.query(BaphSignup) \
             .options(joinedload('user')) \
             .filter_by(activation_key=activation_key) \
@@ -140,7 +142,7 @@ class SignupManager(object):
 
         """
         if SHA1_RE.search(confirmation_key):
-            session = Session()
+            session = orm.sessionmaker()
             signup = session.query(BaphSignup) \
                 .options(joinedload('user')) \
                 .filter(BaphSignup.email_confirmation_key==confirmation_key) \
@@ -173,7 +175,7 @@ class SignupManager(object):
 
         """
         deleted_users = []
-        session = Session()
+        session = orm.sessionmaker()
         users = session.query(User) \
             .filter(User.is_staff==False) \
             .filter(User.is_active==False) \
@@ -186,7 +188,7 @@ class SignupManager(object):
 
     @staticmethod
     def get(pk=None, **kwargs):
-        session = Session()
+        session = orm.sessionmaker()
         if pk:
             obj = session.query(BaphSignup).get(pk)
         else:

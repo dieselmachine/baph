@@ -8,9 +8,11 @@ from baph.auth.models import User, Organization
 from baph.auth.registration.managers import SignupManager
 from baph.auth.registration.models import BaphSignup
 from baph.auth.registration import settings as auth_settings
-from baph.db import Session
+from baph.db.orm import ORM
 from baph.test import TestCase
 
+
+orm = ORM.get()
 
 class SignupManagerTests(TestCase):
     """ Test the manager of Userena """
@@ -45,7 +47,7 @@ class SignupManagerTests(TestCase):
         self.failUnless(re.match('^[a-f0-9]{40}$', new_user.signup.activation_key))
 
         # User should be saved
-        session = Session()
+        session = orm.sessionmaker()
         self.failUnlessEqual(session.query(User).filter(User.email==self.user_info['email']).count(), 1)
 
     def test_activation_valid(self):
@@ -97,7 +99,7 @@ class SignupManagerTests(TestCase):
 
         # Set the date that the key is created a day further away than allowed
         user.date_joined -= datetime.timedelta(days=auth_settings.BAPH_ACTIVATION_DAYS + 1)
-        session = Session()
+        session = orm.sessionmaker()
         session.add(user)
         session.commit()
 
@@ -119,7 +121,7 @@ class SignupManagerTests(TestCase):
 
         """
         new_email = 'john@newexample.com'
-        session = Session()
+        session = orm.sessionmaker()
         user = session.query(User).get(1)
         user.signup.change_email(new_email)
 
@@ -141,7 +143,7 @@ class SignupManagerTests(TestCase):
 
         """
         new_email = 'john@newexample.com'
-        session = Session()
+        session = orm.sessionmaker()
         user = session.query(User).get(1)
         user.signup.change_email(new_email)
 

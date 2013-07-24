@@ -1,11 +1,14 @@
 from hashlib import sha1
+import datetime
 import random
 import types
 
 from sqlalchemy import and_
 
-from baph.db.orm import Base
+from baph.db.orm import ORM
 
+
+orm = ORM.get()
 
 def has_perm(user, resource, action, filters={}):
     # TODO: remove this shim
@@ -36,7 +39,7 @@ def perms_to_filters(perms):
             # this is a boolean permission (no filters involved)
             return []
 
-        cls = Base._decl_class_registry[p.base_class]
+        cls = orm.Base._decl_class_registry[p.base_class]
         keys = p.key.split(',')
         values = p.value.split(',')
         data = zip(keys, values)
@@ -44,7 +47,7 @@ def perms_to_filters(perms):
         filters = []
         for key, value in data:
             frags = key.split('.')
-            #cls = Base._decl_class_registry[frags.pop(0)]
+            #cls = orm.Base._decl_class_registry[frags.pop(0)]
             attr = frags.pop()
             for frag in frags:
                 rel = getattr(cls, frag)
@@ -96,7 +99,7 @@ def get_datetime_now():
 
     """
     try:
-        from django.utils import timezone
+        from baph.utils import timezone
         return timezone.now() # pragma: no cover
     except ImportError: # pragma: no cover
-        return datetime.datetime.now()
+        return datetime.datetime.now().replace(microsecond=0)

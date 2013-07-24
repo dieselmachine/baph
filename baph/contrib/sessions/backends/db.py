@@ -9,13 +9,15 @@
 from __future__ import absolute_import
 
 from datetime import datetime
-from django.contrib.sessions.backends.base import SessionBase, CreateError
+from django.contrib.sessions.backends.base import CreateError
 from django.utils.encoding import force_unicode
 from sqlalchemy.exc import SQLAlchemyError
 
-#from baph.contrib.sessions.backends.base import SessionBase
-from baph.db import Session as sessionmaker
+from baph.contrib.sessions.backends.base import SessionBase
+from baph.db.orm import ORM
 
+
+orm = ORM.get()
 
 class SessionStore(SessionBase):
     '''Implements an SQLAlchemy-based session store for Django.
@@ -24,12 +26,8 @@ class SessionStore(SessionBase):
     ``baph.contrib.sessions.backends.sqlalchemy``.
     '''
 
-    def get_expiry_date(self, **kwargs):
-        d = super(SessionStore, self).get_expiry_date(**kwargs)
-        return str(d).split('.')[0]
-
     def load(self):
-        session = sessionmaker()
+        session = orm.sessionmaker()
         s = session.query(Session) \
                    .filter_by(session_key=self.session_key) \
                    .filter(Session.expire_date > datetime.now()) \
@@ -41,7 +39,7 @@ class SessionStore(SessionBase):
             return self.decode(s.session_data)
 
     def exists(self, session_key):
-        session = sessionmaker()
+        session = orm.sessionmaker()
         return session.query(Session) \
                .filter_by(session_key=session_key) \
                .count() > 0
@@ -73,7 +71,7 @@ class SessionStore(SessionBase):
         )
         if self.exists(self.session_key) and must_create:
             raise CreateError
-        session = sessionmaker()
+        session = orm.sessionmaker()
         try:
             session.merge(obj)
             session.commit()
@@ -87,7 +85,7 @@ class SessionStore(SessionBase):
                 return
             else:
                 session_key = self.session_key
-        session = sessionmaker()
+        session = orm.sessionmaker()
         session.query(Session) \
             .filter_by(session_key=session_key) \
             .delete()

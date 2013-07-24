@@ -6,13 +6,16 @@ from django.conf import settings
 from django.core.management import call_command
 from django.core.management.color import no_style
 from django.utils.importlib import import_module
+from sqlalchemy.orm import configure_mappers
 
 from baph.auth.management import create_permissions
 from baph.auth.models import Permission, PermissionAssociation
 from baph.core.management.base import NoArgsCommand, CommandError
-from baph.db import Session
 from baph.db.models import get_apps
+from baph.db.orm import ORM
 
+
+orm = ORM.get()
 
 class Command(NoArgsCommand):
     option_list = NoArgsCommand.option_list + (
@@ -26,10 +29,12 @@ class Command(NoArgsCommand):
         interactive = options.get('interactive')
         flush = options.get('flush')
         self.style = no_style()
+        
+        #configure_mappers()
 
         if flush:
             # clear existing permissions
-            session = Session()
+            session = orm.sessionmaker()
             session.execute(Permission.__table__.delete())
             session.commit()
         

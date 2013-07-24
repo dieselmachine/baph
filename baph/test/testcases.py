@@ -6,10 +6,11 @@ import time
 
 from django.core.management import call_command
 from django.test import TestCase as DjangoTestCase
-#from tastypie.test import ResourceTestCase
 
-from baph.db import Session
+from baph.db.orm import ORM
 
+
+orm = ORM.get()
 
 def generate_debug_cache(count=0):
     return json.dumps({
@@ -20,21 +21,7 @@ def generate_debug_cache(count=0):
 class TestCase(DjangoTestCase):
 
     reset_sequences = False
-    '''
-    def create_oauth(self, key):
-        """
-        Creates & returns the HTTP ``Authorization`` header for use with Oauth.
-        """
-        oauth_data = {
-            'oauth_consumer_key': key,
-            'oauth_nonce': 'abc',
-            'oauth_signature': '&',
-            'oauth_signature_method': 'PLAINTEXT',
-            'oauth_timestamp': str(int(time.time())),
-        }
-        return 'OAuth %s' % ','.join([key+'='+value for key, value in \
-            oauth_data.items()])
-    '''
+    
     def _fixture_setup(self):
         if hasattr(self, 'fixtures'):
             params = {
@@ -44,7 +31,7 @@ class TestCase(DjangoTestCase):
                 'commit': False,
                 }
             call_command('loaddata', *self.fixtures, **params)
-        session = Session()
+        session = orm.sessionmaker()
         session.expunge_all()
 
     def _fixture_teardown(self):

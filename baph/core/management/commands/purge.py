@@ -14,9 +14,12 @@ from sqlalchemy import MetaData, inspect
 from sqlalchemy.engine import reflection
 from sqlalchemy.schema import CreateSchema, DropSchema, CreateTable, DropTable, DropConstraint, ForeignKeyConstraint, Table, MetaData
 
-from baph.db import connections, Session, DEFAULT_DB_ALIAS
+from baph.db import connections, DEFAULT_DB_ALIAS
 from baph.db.models import Base, signals, get_apps, get_models
+from baph.db.orm import ORM
 
+
+orm = ORM.get()
 
 post_syncdb = Signal(providing_args=["class", "app", "created_models", 
     "verbosity", "interactive", "db"])
@@ -152,11 +155,11 @@ class Command(NoArgsCommand):
             if any(t.name == table_name for t in tbs):
                 continue
             fks = []
-            for fk in inspector.get_foreign_keys(table_name):
+            for fk in inspector.get_foreign_keys(table_name, schema=model.__table__.schema):
                 if not fk['name']:
                     continue
                 fks.append(ForeignKeyConstraint((), (), name=fk['name']))
-            t = Table(table_name, metadata, *fks)
+            t = Table(table_name, metadata, *fks, schema=model.__table__.schema)
             tbs.append(t)
             all_fks.extend(fks)
 
@@ -164,4 +167,5 @@ class Command(NoArgsCommand):
             conn.execute(DropConstraint(fkc))
 
         for table in tbs:
+            print 'dropping ', table.name
             conn.execute(DropTable(table))

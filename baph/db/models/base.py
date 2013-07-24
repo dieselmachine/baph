@@ -18,7 +18,7 @@ from sqlalchemy.orm.attributes import instance_dict, instance_state
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 from sqlalchemy.orm.util import has_identity
 
-from baph.db import Session
+from baph.db.orm import ORM
 from baph.db.models.loading import get_model, register_models
 from baph.db.models.mixins import CacheMixin, ModelPermissionMixin
 from baph.db.models.options import Options
@@ -88,7 +88,8 @@ class Model(CacheMixin, ModelPermissionMixin):
         if has_identity(self):
             session = object_session(self)
         else:
-            session = Session()
+            orm = ORM.get()
+            session = orm.sessionmaker()
             session.add(self)
         session.commit()
 
@@ -125,9 +126,25 @@ class Model(CacheMixin, ModelPermissionMixin):
         if hasattr(parent_cls, 'is_mapper') and parent_cls.is_mapper:
             # we found a mapper, grab the class from it
             parent_cls = parent_cls.class_
-        session = Session()
+        orm = ORM.get()
+        session = orm.sessionmaker()
         parent = session.query(parent_cls).filter_by(**filters).first()
         return parent
+
+    def to_dict(self):
+        '''Creates a dictionary out of the column properties of the object.
+        This is needed because it's sometimes not possible to just use
+        :data:`__dict__`.
+
+        :rtype: :class:`dict`
+        '''
+        __dict__ = dict([(key, val) for key, val in self.__dict__.iteritems()
+                         if not key.startswith('_sa_')])
+        if len(__dict__) == 0:
+            return dict([(col.name, getattr(self, col.name))
+                         for col in self.__table__.c])
+        else:
+            return __dict__
 
 class ModelBase(type):
 

@@ -13,7 +13,10 @@ from django.utils.functional import SimpleLazyObject
 
 from baph import auth
 from baph.auth.models import Organization
-from baph.db import Session
+from baph.db.orm import ORM
+
+
+orm = ORM.get()
 
 """
 class LazyUser(object):

@@ -96,6 +96,23 @@ BAPH_WITHOUT_USERNAMES = getattr(settings,
                                     'BAPH_WITHOUT_USERNAMES',
                                     False)
 
+BAPH_AUTH_UNIQUE_EMAIL = getattr(settings,
+                                  'BAPH_AUTH_UNIQUE_EMAIL',
+                                  True)
+
+BAPH_AUTH_UNIQUE_ORG_EMAIL = getattr(settings,
+                                  'BAPH_AUTH_UNIQUE_ORG_EMAIL',
+                                  False)
+
+BAPH_AUTH_UNIQUE_USERNAME = getattr(settings,
+                                  'BAPH_AUTH_UNIQUE_USERNAME',
+                                  True)
+
+BAPH_AUTH_UNIQUE_ORG_USERNAME = getattr(settings,
+                                  'BAPH_AUTH_UNIQUE_ORG_USERNAME',
+                                  False)
+
+
 BAPH_PROFILE_DETAIL_TEMPLATE = getattr(
     settings, 'BAPH_PROFILE_DETAIL_TEMPLATE', 'BAPH/profile_detail.html')
 

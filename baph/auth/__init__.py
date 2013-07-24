@@ -4,7 +4,10 @@ from datetime import datetime
 from django.contrib.auth import BACKEND_SESSION_KEY, load_backend, SESSION_KEY
 
 from baph.auth.utils import get_datetime_now
-from baph.db import Session
+from baph.db.orm import ORM
+
+
+orm = ORM.get()
 
 
 def login(request, user):
@@ -14,7 +17,7 @@ def login(request, user):
     :param user: The user object.
     :type user: :class:`baph.auth.models.User`
     '''
-    session = Session()
+    session = orm.sessionmaker()
     if user is None:
         user = request.user
     # TODO: It would be nice to support different login methods, like signed

@@ -18,6 +18,8 @@ from pytz import timezone
 from sqlalchemy import types
 from sqlalchemy.databases import mysql, postgresql
 
+from baph.utils.timezone import is_naive, is_aware, make_aware
+
 
 class UUID(types.TypeDecorator):
     '''Generic UUID column type for SQLAlchemy. Includes native support for
@@ -106,7 +108,7 @@ class TZAwareDateTime(types.TypeDecorator):
     def __init__(self, tz, *args, **kwargs):
         super(TZAwareDateTime, self).__init__(*args, **kwargs)
         self.tz = timezone(tz)
-    
+
     def process_bind_param(self, value, dialect):
         if value is None:
             return None
@@ -122,10 +124,22 @@ class TZAwareDateTime(types.TypeDecorator):
                     value -= delta
                 else:
                     value += delta
-        value = value.replace(tzinfo=self.tz)
+
+        if is_naive(value):
+            value = make_aware(value, self.tz)
+        else:
+            value = value.replace(tzinfo=self.tz)
         return value.strftime('%Y-%m-%d %H:%M:%S')
 
     def process_result_value(self, value, dialect):
         if value is None:
             return None
-        return self.tz.localize(value, is_dst=None)
+        value = self.tz.localize(value, is_dst=None)
+        return value
+        
+    def compare_values(self, x, y):
+        if x and y and is_naive(x) and is_aware(y):
+            x = make_aware(x, self.tz)
+        elif x and y and is_aware(x) and is_naive(y):
+            y = make_aware(y, self.tz)
+        return x == y

@@ -18,8 +18,7 @@ class DecoratorTests(TestCase):
 
         """
         auth_settings.BAPH_USE_HTTPS = True
-        response = self.client.get(reverse('baph_signin'),
-            HTTP_HOST=settings.BAPH_AUTH_DEFAULT_HOST)
+        response = self.client.get(reverse('baph_signin'))
 
         # Test for the permanent redirect
         self.assertEqual(response.status_code, 301)

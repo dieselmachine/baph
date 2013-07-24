@@ -31,9 +31,10 @@ class DefaultConnectionProxy(object):
         return setattr(connections[DEFAULT_DB_ALIAS], name, value)
 
 connection = DefaultConnectionProxy()
-engine = connections[DEFAULT_DB_ALIAS]
-engine.echo = getattr(settings, 'BAPH_DB_ECHO', False)
-Session = scoped_session(sessionmaker(bind=engine, autoflush=False))
+#engine = connections[DEFAULT_DB_ALIAS]
+#engine.echo = getattr(settings, 'BAPH_DB_ECHO', False)
+#Session = scoped_session(sessionmaker(bind=engine, autoflush=False))
+
 
 #
 #print connections['default']

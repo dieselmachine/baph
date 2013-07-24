@@ -7,6 +7,9 @@ from django import forms
 from django.core import validators
 from django.utils.translation import ugettext_lazy as _
 
+from baph.db.orm import ORM
+
+#orm = ORM.get()
 
 class ObjectField(forms.Field):
     " allowed values must be sqlalchemy objects (result of resource hydration)"
@@ -71,7 +74,7 @@ class OneToManyField(ListField):
         value = super(OneToManyField, self).to_python(value)
         if all(isinstance(v, int) for v in value):
             # list of primary keys
-            session = Session()
+            session = orm.sessionmaker()
             return session.query(self.model) \
                 .filter(self.model.id.in_(value)) \
                 .all()
@@ -94,7 +97,7 @@ class ManyToManyField(ListField):
         value = super(ManyToManyField, self).to_python(value)
         if all(isinstance(v, int) for v in value):
             # list of primary keys
-            session = Session()
+            session = orm.sessionmaker()
             return session.query(self.model) \
                 .filter(self.model.id.in_(value)) \
                 .all()

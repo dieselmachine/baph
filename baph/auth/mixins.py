@@ -1,16 +1,17 @@
 from sqlalchemy import inspect
 from sqlalchemy.orm.util import identity_key
 
-from baph.db import Session
 from baph.db.models.loading import cache
-from baph.db.orm import Base
+from baph.db.orm import ORM
 
+
+orm = ORM.get()
 
 def string_to_model(string):
-    if string in Base._decl_class_registry:
-        return Base._decl_class_registry[string]
-    elif string.title() in Base._decl_class_registry:
-        return Base._decl_class_registry[string.title()]
+    if string in orm.Base._decl_class_registry:
+        return orm.Base._decl_class_registry[string]
+    elif string.title() in orm.Base._decl_class_registry:
+        return orm.Base._decl_class_registry[string.title()]
     else:
         # this string doesn't match a resource
         return None
@@ -63,7 +64,7 @@ def key_to_value(obj, key):
             # relation and key are both empty: no parent found
             return None
 
-        session = Session()
+        session = orm.sessionmaker()
         current_obj = session.query(related_cls).get(related_val)
 
     value = getattr(current_obj, col_key, None)
@@ -192,7 +193,7 @@ class UserPermissionMixin(object):
             return False
 
         cls_name = tuple(perms)[0].base_class
-        cls = Base._decl_class_registry[cls_name]
+        cls = orm.Base._decl_class_registry[cls_name]
         obj = cls(**filters)
         return self.has_obj_perm(resource, action, obj)
 

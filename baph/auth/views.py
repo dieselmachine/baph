@@ -17,7 +17,6 @@ from django.core.urlresolvers import reverse
 from django.http import Http404, HttpResponseRedirect
 from django.utils.http import base36_to_int
 from django.utils.translation import ugettext_lazy as _
-from django.shortcuts import resolve_url
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 from sqlalchemy.orm.exc import NoResultFound
@@ -25,7 +24,8 @@ import re
 from uuid import UUID
 # avoid shadowing
 
-from baph.db import Session
+from baph.db.orm import ORM
+from baph.shortcuts import resolve_url
 from . import login as auth_login, logout as auth_logout
 from .forms import PasswordResetForm, SetPasswordForm
 from .models import User
@@ -33,7 +33,7 @@ from .models import User
 # fun with monkeypatching
 #exec inspect.getsource(password_reset_done)
 #exec inspect.getsource(password_reset_complete)
-
+orm = ORM.get()
 
 @csrf_protect
 @never_cache
@@ -171,7 +171,7 @@ def password_reset_confirm(request, uidb36=None, token=None,
         post_reset_redirect = reverse('baph.auth.views.password_reset_complete')
     try:
         uid_int = base36_to_int(uidb36)
-        session = Session()
+        session = orm.sessionmaker()
         user = session.query(User).get(uid_int)
     except (ValueError, OverflowError, NoResultFound):
         user = None

@@ -24,8 +24,10 @@ from baph.auth.registration import settings
 from baph.auth.registration.managers import SignupManager
 from baph.auth.registration.models import BaphSignup
 from baph.auth.utils import generate_sha1
-from baph.db import Session
+from baph.db.orm import ORM
 
+
+orm = ORM.get()
 
 attrs_dict = {'class': 'required'}
 
@@ -167,6 +169,8 @@ class SignupForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super(SignupForm, self).__init__(*args, **kwargs)
         base_form = User.get_form_class()
+        if not base_form:
+            raise Exception('no form_class found in User.Meta')
         if not settings.BAPH_WITHOUT_USERNAMES:
             field_name = User.USERNAME_FIELD
             self.fields[field_name] = base_form.base_fields[field_name]
@@ -181,11 +185,18 @@ class SignupForm(forms.Form):
                 label=_(label))
 
     def clean_username(self):
-        col = getattr(User, User.USERNAME_FIELD)
-        session = Session()
+        username = User.USERNAME_FIELD
+        if settings.BAPH_AUTH_UNIQUE_USERNAME:
+            filters = {username: self.cleaned_data[username]}
+        elif settings.BAPH_AUTH_UNIQUE_ORG_USERNAME:
+            filters = {
+                username: self.cleaned_data[username],
+                User.org_key: Organization.get_current_id(),
+                }
+        session = orm.sessionmaker()
         user = session.query(User) \
             .options(joinedload('signup')) \
-            .filter(col==self.cleaned_data[User.USERNAME_FIELD]) \
+            .filter_by(**filters) \
             .first()
         if user and user.signup and user.signup.activation_key != settings.BAPH_ACTIVATED:
             raise forms.ValidationError(_('This username is already taken but '
@@ -193,14 +204,20 @@ class SignupForm(forms.Form):
                 'steps.'))
         if user:
             raise forms.ValidationError(_('This username is already taken'))
-        return self.cleaned_data[User.USERNAME_FIELD]
+        return self.cleaned_data[username]
 
     def clean_email(self):
-        col = getattr(User, 'email')
-        session = Session()
+        if settings.BAPH_AUTH_UNIQUE_EMAIL:
+            filters = {'email': self.cleaned_data['email']}
+        elif settings.BAPH_AUTH_UNIQUE_ORG_EMAIL:
+            filters = {
+                'email': self.cleaned_data['email'],
+                User.org_key: Organization.get_current_id(),
+                }
+        session = orm.sessionmaker()
         user = session.query(User) \
             .options(joinedload('signup')) \
-            .filter(col==self.cleaned_data['email']) \
+            .filter_by(**filters) \
             .first()
         if user and user.signup and user.signup.activation_key != settings.BAPH_ACTIVATED:
             raise forms.ValidationError(_('This email is already taken but '
@@ -211,9 +228,11 @@ class SignupForm(forms.Form):
         return self.cleaned_data['email']
 
     def clean(self):
+        # check that passwords match
         if 'password1' in self.cleaned_data and 'password2' in self.cleaned_data:
             if self.cleaned_data['password1'] != self.cleaned_data['password2']:
                 raise forms.ValidationError(_('The two password fields didn\'t match.'))
+        # check uniqueness of constraints
         return self.cleaned_data
 
     def save(self):
@@ -250,7 +269,7 @@ class SignupFormOnlyEmail(SignupForm):
 
     def save(self):
         """ Generate a random username before falling back to parent signup form """
-        session = Session()
+        session = orm.sessionmaker()
         while True:
             username = sha_constructor(str(random.random())).hexdigest()[:5]
             user = session.query(User).filter(User.username==username).first()
@@ -283,10 +302,17 @@ class ChangeEmailForm(forms.Form):
         if self.cleaned_data['email'].lower() == self.user.email:
             raise forms.ValidationError(_(u'You\'re already known under this '
                 'email.'))
-        session = Session()
+        if settings.BAPH_AUTH_UNIQUE_EMAIL:
+            filters = {'email': self.cleaned_data['email']}
+        elif settings.BAPH_AUTH_UNIQUE_ORG_EMAIL:
+            filters = {
+                'email': self.cleaned_data['email'],
+                User.org_key: Organization.get_current_id(),
+                }
+        session = orm.sessionmaker()
         user = session.query(User) \
-            .filter(User.email == self.cleaned_data['email']) \
             .filter(User.email != self.user.email) \
+            .filter_by(**filters) \
             .first()
         if user:
             raise forms.ValidationError(_(u'This email is already in use. '

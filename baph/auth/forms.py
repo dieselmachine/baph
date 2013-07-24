@@ -6,13 +6,14 @@ from django import forms
 from django.contrib.auth.forms import SetPasswordForm as BaseSetPasswordForm
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.datastructures import SortedDict
-from django.utils.encoding import force_bytes
 from django.utils.http import int_to_base36
 from django.utils.translation import ugettext_lazy as _
 
 from baph.auth.models import User, Organization #UNUSABLE_PASSWORD
-from baph.db import Session
+from baph.db.orm import ORM
 
+
+orm = ORM.get()
 
 class PasswordResetForm(forms.Form):
     email = forms.EmailField(label=_('E-mail'), max_length=75)
@@ -20,7 +21,7 @@ class PasswordResetForm(forms.Form):
     def clean_email(self):
         '''Validates that a user exists with the given e-mail address.'''
         email = self.cleaned_data['email']
-        session = Session()
+        session = orm.sessionmaker()
         users = session.query(User).filter_by(email=email).all()
         if len(users) == 0:
             raise forms.ValidationError(_(u'''\
@@ -70,10 +71,13 @@ class SetPasswordForm(BaseSetPasswordForm):
     '''A form that lets a user change set his/her password without entering
     the old password.
     '''
+    error_messages = {
+        'password_mismatch': _("The two password fields didn't match."),
+    }
 
     def __init__(self, user, *args, **kwargs):
         self.user = user
-        self.session = Session()
+        self.session = orm.sessionmaker()
         super(SetPasswordForm, self).__init__(user, *args, **kwargs)
 
     def save(self, commit=True):

@@ -4,7 +4,6 @@ from django.core.urlresolvers import reverse
 from django.core import mail
 from django.contrib.auth.forms import PasswordChangeForm
 from django.conf import settings
-from django.test.utils import override_settings
 
 from baph.auth.models import User, Organization
 from baph.auth.utils import get_datetime_now
@@ -12,24 +11,27 @@ from baph.auth.registration import forms
 from baph.auth.registration.managers import SignupManager
 from baph.auth.registration.models import BaphSignup
 from baph.auth.registration import settings as auth_settings
-from baph.db import Session
+from baph.db.orm import ORM
 from baph.test import TestCase
+from baph.test.utils import override_settings
 
+
+orm = ORM.get()
 
 class RegistrationViewsTests(TestCase):
     """ Test the account views """
-    fixtures = ['users', 'profiles']
+    fixtures = ['users']
 
     def test_valid_activation(self):
         """ A ``GET`` to the activation view """
         # First, register an account.
-        self.client.post(reverse('baph_signup'),
+        rsp = self.client.post(reverse('baph_signup'),
                          data={'username': 'alice',
                                'email': 'alice@example.com',
                                'password1': 'swordfish',
                                'password2': 'swordfish',
                                'tos': 'on'})
-        session = Session()
+        session = orm.sessionmaker()
         user = session.query(User).filter_by(email='alice@example.com').first()
         response = self.client.get(reverse('baph_activate',
                                            kwargs={'activation_key': user.signup.activation_key}))
@@ -49,12 +51,13 @@ class RegistrationViewsTests(TestCase):
                                'password1': 'swordfish',
                                'password2': 'swordfish',
                                'tos': 'on'})
-        session = Session()
+        session = orm.sessionmaker()
         user = session.query(User).filter_by(email='alice@example.com').first()
         user.date_joined = get_datetime_now() - timedelta(days=30)
         user.save()
         response = self.client.get(reverse('baph_activate',
                                            kwargs={'activation_key': user.signup.activation_key}))
+
         self.assertContains(response, "Request a new activation link")
 
         user = session.query(User).filter_by(email='alice@example.com').first()
@@ -71,7 +74,7 @@ class RegistrationViewsTests(TestCase):
                                'password1': 'swordfish',
                                'password2': 'swordfish',
                                'tos': 'on'})
-        session = Session()
+        session = orm.sessionmaker()
         user = session.query(User).filter_by(email='alice@example.com').first()
         user.date_joined = get_datetime_now() - timedelta(days=30)
         user.save()
@@ -96,6 +99,7 @@ class RegistrationViewsTests(TestCase):
         #self.assertRedirects(response,
         #                     reverse('baph_profile_detail', kwargs={'username': user.username}))
 
+        session = orm.sessionmaker()
         user = session.query(User).filter_by(email='alice@example.com').first()
         self.failUnless(user.is_active)
         auth_settings.BAPH_ACTIVATION_RETRY = False
@@ -114,7 +118,7 @@ class RegistrationViewsTests(TestCase):
     def test_valid_confirmation(self):
         """ A ``GET`` to the verification view """
         # First, try to change an email.
-        session = Session()
+        session = orm.sessionmaker()
         user = session.query(User).get(1)
         user.signup.change_email('johnie@example.com')
 
@@ -194,7 +198,7 @@ class RegistrationViewsTests(TestCase):
         self.assertRedirects(response, reverse('baph_signup_complete'))
 
         # Check for new user.
-        session = Session()
+        session = orm.sessionmaker()
         self.assertEqual(session.query(User).filter_by(email='alice@example.com').count(), 1)
 
     def test_signup_view_with_signin(self):
@@ -268,12 +272,11 @@ class RegistrationViewsTests(TestCase):
         response = self.client.post(reverse('baph_signin'),
                                     data={'identification': 'john@example.com',
                                           'password': 'blowfish'})
-
         self.failUnless(self.client.session.get_expire_at_browser_close())
 
     def test_signin_view_inactive(self):
         """ A ``POST`` from a inactive user """
-        session = Session()
+        session = orm.sessionmaker()
         user = session.query(User).filter_by(email='john@example.com').first()
         user.is_active = False
         user.save()
@@ -302,8 +305,8 @@ class RegistrationViewsTests(TestCase):
         response = self.client.post(reverse('baph_signin'),
                                     data={'identification': 'john@example.com',
                                           'password': 'blowfish',
-                                          'next': '/'})
-        self.assertRedirects(response, '/')
+                                          'next': settings.LOGIN_REDIRECT_URL})
+        self.assertRedirects(response, settings.LOGIN_REDIRECT_URL)
 
     def test_signin_view_with_invalid_next(self):
         """
@@ -376,7 +379,7 @@ class RegistrationViewsTests(TestCase):
         self.assertRedirects(response, reverse('baph_password_change_complete'))
 
         # Check that the new password is set.
-        session = Session()
+        session = orm.sessionmaker()
         john = session.query(User).filter_by(username='john').first()
         self.failUnless(john.check_password(new_password))
 

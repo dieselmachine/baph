@@ -2,6 +2,7 @@
 '''Views which allow users to create and activate accounts.'''
 from coffin.shortcuts import render_to_response, redirect
 from coffin.template import RequestContext
+from django.conf import settings as django_settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, REDIRECT_FIELD_NAME
 #from django.contrib.auth.forms import AuthenticationForm
@@ -11,10 +12,9 @@ from django.http import HttpResponseRedirect, HttpResponseForbidden
 from django.utils.translation import ugettext as _
 from sqlalchemy.orm.exc import NoResultFound
 
-from baph.db import Session
 from baph.auth import login, logout
 from baph.auth.forms import PasswordChangeForm
-from baph.auth.models import User
+from baph.auth.models import User, Organization
 from baph.auth.registration import settings
 from baph.auth.registration.decorators import secure_required
 from baph.auth.registration.forms import (SignupForm, AuthenticationForm,
@@ -23,13 +23,15 @@ from baph.auth.registration.managers import SignupManager
 from baph.auth.registration.models import BaphSignup
 from baph.auth.registration.utils import signin_redirect
 from baph.auth.views import logout as Signout
+from baph.db.orm import ORM
 
+
+orm = ORM.get()
 
 @secure_required
 def signup(request, signup_form=SignupForm,
             template_name='registration/signup_form.html',
             success_url=None, extra_context=None):
-
     if settings.BAPH_WITHOUT_USERNAMES and (signup_form == SignupForm):
         signup_form = SignupFormOnlyEmail
 
@@ -65,8 +67,9 @@ def signup(request, signup_form=SignupForm,
 def activate(request, activation_key,
              template_name='registration/activate_fail.html',
              retry_template_name='registration/activate_retry.html',
-             success_url='/', extra_context=None):
-    session = Session()
+             success_url=django_settings.LOGIN_REDIRECT_URL,
+             extra_context=None):
+    session = orm.sessionmaker()
     signup = session.query(BaphSignup) \
         .filter_by(activation_key=activation_key) \
         .first()

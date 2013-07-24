@@ -12,8 +12,11 @@ from django.utils.text import capfirst
 
 from baph.auth.management import get_default_username
 from baph.core.management.base import BaseCommand, CommandError
-from baph.db import Session, DEFAULT_DB_ALIAS
+from baph.db import DEFAULT_DB_ALIAS
+from baph.db.orm import ORM
 
+
+orm = ORM.get()
 
 class Command(BaseCommand):
 
@@ -98,7 +101,7 @@ class Command(BaseCommand):
                         username = None
                         continue
 
-                    session = Session()
+                    session = orm.sessionmaker()
                     user = session.query(self.UserModel) \
                         .filter_by(username=username) \
                         .first()

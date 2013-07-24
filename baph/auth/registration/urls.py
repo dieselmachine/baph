@@ -1,4 +1,8 @@
-from coffin.conf.urls import *
+try:
+    from coffin.conf.urls.defaults import *
+except:
+    from coffin.conf.urls import *
+    
 from django.contrib.auth import views as auth_views
 
 from baph.auth.registration import settings

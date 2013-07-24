@@ -2,10 +2,12 @@ from django.utils.translation import ugettext_lazy as _
 
 from baph.auth.models import User
 from baph.auth.registration import forms
-from baph.db import Session
+from baph.db.orm import ORM
 from baph.test import TestCase
 from baph.auth.registration import settings as auth_settings
 
+
+orm = ORM.get()
 
 class SignupFormTests(TestCase):
     """ Test the signup form. """
@@ -17,6 +19,8 @@ class SignupFormTests(TestCase):
         e-mail addresses.
 
         """
+        auth_settings.BAPH_WITHOUT_USERNAMES = False
+
         invalid_data_dicts = [
             # Non-alphanumeric username.
             #{'data': {'username': 'foo@bar',
@@ -58,7 +62,6 @@ class SignupFormTests(TestCase):
                       'tos': 'on'},
              'error': ('email', [_(u'This email is already taken')])},
         ]
-
         for invalid_dict in invalid_data_dicts:
             form = forms.SignupForm(data=invalid_dict['data'])
             self.failIf(form.is_valid())
@@ -85,6 +88,8 @@ class AuthenticationFormTests(TestCase):
         Check that the ``SigninForm`` requires both identification and password
 
         """
+        auth_settings.BAPH_WITHOUT_USERNAMES = False
+        
         invalid_data_dicts = [
             {'data': {'identification': '',
                       'password': 'inhalefish'},
@@ -167,7 +172,7 @@ class ChangeEmailFormTests(TestCase):
     fixtures = ['users']
 
     def test_change_email_form(self):
-        session = Session()
+        session = orm.sessionmaker()
         user = session.query(User).get(1)
         invalid_data_dicts = [
             # No change in e-mail address

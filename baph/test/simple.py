@@ -13,13 +13,14 @@ from django.utils.module_loading import module_has_submodule
 from sqlalchemy import create_engine
 from sqlalchemy.schema import CreateSchema, DropSchema
 
-from baph.db import Session
 from baph.db.models import get_app, get_apps
-from baph.db.orm import Base
+from baph.db.orm import ORM
 from baph.utils.importing import import_any_module
 #from baph.utils.unittest.loader import TestLoader
 #from baph.utils.unittest.suite import TestSuite
 
+
+orm = ORM.get()
 
 __all__ = ('BaphTestSuiteRunner',)
 
@@ -221,12 +222,12 @@ class BaphTestSuiteRunner(object):
             import_any_module(['%s.models' % app], raise_error=False)
 
         # determine which schemas we need
-        default_schema = Session.bind.url.database
+        default_schema = orm.metadata.bind.url.database
         schemas = set(t.schema or default_schema \
-            for t in Base.metadata.tables.values())
+            for t in orm.Base.metadata.tables.values())
 
         # get a list of already-existing schemas
-        new_url = str(Session.bind.url).rsplit('/',1)[0]
+        new_url = str(orm.metadata.bind.url).rsplit('/',1)[0]
         self.engine = create_engine(new_url)
         conn = self.engine.connect()
         existing_schemas = set(self.engine.dialect.get_schema_names(conn))
@@ -245,8 +246,8 @@ class BaphTestSuiteRunner(object):
             self.engine.execute(CreateSchema(schema))
 
         # create tables
-        if len(Base.metadata.tables) > 0:
-            Base.metadata.create_all(bind=Session.bind)
+        if len(orm.Base.metadata.tables) > 0:
+            orm.Base.metadata.create_all(bind=orm.metadata.bind)
 
         # generate permissions
         call_command('createpermissions')

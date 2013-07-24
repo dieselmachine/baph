@@ -13,12 +13,13 @@ except:
 from sqlalchemy.ext.declarative import has_inherited_table
 
 from baph.auth import models as auth_app #, get_user_model
-from baph.db import Session, DEFAULT_DB_ALIAS
+from baph.db import DEFAULT_DB_ALIAS
 from baph.db.models import get_models
-from baph.db.orm import Base
-#from baph.db import Session
+from baph.db.orm import ORM
 #from baph.db.models import signals, get_models
 
+
+orm = ORM.get()
 
 def _get_permission_codename(action, opts, label=None):
     label = label if label else opts.model_name
@@ -62,9 +63,9 @@ def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
     #print 'create perm for app:', app
     app_models = []
     for k, v in vars(app).items():
-        if k not in Base._decl_class_registry:
+        if k not in orm.Base._decl_class_registry:
             continue
-        if v not in Base._decl_class_registry.values():
+        if v not in orm.Base._decl_class_registry.values():
             continue
         if hasattr(app, '__package__') and app.__package__ + '.models' != v.__module__:
             continue
@@ -88,7 +89,7 @@ def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
             searched_perms.append(perm)
             searched_codenames.add(perm.codename)
 
-    session = Session()    
+    session = orm.sessionmaker()
     all_perms = session.query(auth_app.Permission).all()
     all_codenames = set(p.codename for p in all_perms)
 
@@ -166,7 +167,7 @@ def get_default_username(check_db=True):
 
     # Don't return the default username if it is already taken.
     if check_db and default_username:
-        session = Session()
+        session = orm.sessionmaker()
         user = session.query(auth_app.User).filter_by(username=default_username).first()
         if user:
             return ''

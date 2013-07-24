@@ -7,15 +7,10 @@
 '''
 
 from django.conf import settings
-from django.contrib.sessions.backends.base import SessionBase, CreateError
-from newcache import CacheClass
+from django.core.cache import get_cache
+from django.contrib.sessions.backends.base import CreateError
 
-
-class Cache(CacheClass):
-
-    def __init__(self, server, params):
-        super(Cache, self).__init__('', params)
-        self._servers = server
+from baph.contrib.sessions.backends.base import SessionBase
 
 
 class SessionStore(SessionBase):
@@ -44,11 +39,8 @@ class SessionStore(SessionBase):
     '''
 
     def __init__(self, session_key=None):
-        session_memcache_settings = getattr(settings,
-                                            'SESSION_MEMCACHE_SETTINGS',
-                                            {})
-        self._cache = Cache(settings.SESSION_MEMCACHE_SERVERS,
-                            session_memcache_settings)
+        session_db_key = getattr(settings, 'SESSION_CACHE_ALIAS', 'default')
+        self._cache = get_cache(session_db_key)
         super(SessionStore, self).__init__(session_key)
 
     def load(self):

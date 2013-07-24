@@ -30,7 +30,7 @@ try:
     from django.utils.crypto import constant_time_compare
 except:
     pass
-from django.utils import timezone
+
 from django.utils.encoding import smart_str
 from django.utils.importlib import import_module
 from django.utils.translation import ugettext as _
@@ -40,11 +40,11 @@ from sqlalchemy.ext.declarative import declared_attr, clsregistry
 from sqlalchemy.ext.declarative.base import _add_attribute
 from sqlalchemy.orm import synonym, relationship, backref, RelationshipProperty
 
+from baph.auth.registration import settings as auth_settings
 from baph.auth.mixins import UserPermissionMixin
 from baph.auth.utils import get_datetime_now
-from baph.db import Session
 from baph.db.models import Model
-from baph.db.orm import Base
+from baph.db.orm import ORM
 from baph.db.types import UUID, Dict, List, TZAwareDateTime
 from baph.utils.strings import random_string
 from baph.auth.hashers import check_password, make_password, is_password_usable, identify_hasher
@@ -52,6 +52,8 @@ from baph.utils.importing import import_attr
 
 import inspect
 
+
+orm = ORM.get()
 
 AUTH_USER_FIELD_TYPE = getattr(settings, 'AUTH_USER_FIELD_TYPE', 'UUID')
 AUTH_USER_FIELD = UUID if AUTH_USER_FIELD_TYPE == 'UUID' else Integer
@@ -79,11 +81,12 @@ def update_last_login(sender, user, **kwargs):
     A signal receiver which updates the last_login date for
     the user logging in.
     """
-    user.last_login = timezone.now()
+    user.last_login = get_datetime_now()
     user.save(update_fields=['last_login'])
+# user_logged_in.connect(update_last_login) #TODO: connect this signal
 
 def get_or_fail(codename):
-    session = Session()
+    session = orm.sessionmaker()
     try:
         perm = session.query(Permission).filter_by(codename=codename).one()
     except:
@@ -91,10 +94,10 @@ def get_or_fail(codename):
     return PermissionAssociation(permission=perm)
 
 def string_to_model(string):
-    if string in Base._decl_class_registry:
-        return Base._decl_class_registry[string]
+    if string in orm.Base._decl_class_registry:
+        return orm.Base._decl_class_registry[string]
     elif string.title() in Base._decl_class_registry:
-        return Base._decl_class_registry[string.title()]
+        return orm.Base._decl_class_registry[string.title()]
     else:
         # this string doesn't match a resource
         return None
@@ -105,7 +108,7 @@ def string_to_model(string):
 
 # permission classes
 
-class Permission(Base, Model):
+class Permission(orm.Base, Model):
     __tablename__ = 'baph_auth_permissions'
     __table_args__ = {
         'info': {'preserve_during_flush': True},
@@ -123,19 +126,30 @@ class Permission(Base, Model):
 
 # organization classes
 
-class AbstractBaseOrganization(Base):
+class AbstractBaseOrganization(orm.Base):
     __abstract__ = True
     id = Column(Integer, primary_key=True)
+    name = Column(Unicode(200), nullable=False)
 
     @classmethod
     def get_current(cls):
         raise NotImplemented('get_current must be defined on the '
             'custom Organization model')
 
+    @classmethod
+    def get_current_id(cls):
+        org = cls.get_current()
+        if not org:
+            return None
+        if isinstance(org, dict):
+            return org['id']
+        else:
+            return org.id
+
+
 class BaseOrganization(AbstractBaseOrganization):
     __tablename__ = 'baph_auth_organizations'
     __requires_subclass__ = True
-    name = Column(Unicode(200), nullable=False)
 
 class Organization(BaseOrganization):
     class Meta:
@@ -144,7 +158,7 @@ class Organization(BaseOrganization):
 
 # group classes
 
-class AbstractBaseGroup(Base):
+class AbstractBaseGroup(orm.Base):
     __abstract__ = True
     id = Column(Integer, primary_key=True)
 
@@ -190,15 +204,14 @@ class AnonymousUser(object):
     def has_resource_perm(self, resource):
         return False
 
-class AbstractBaseUser(Base, UserPermissionMixin):
+class AbstractBaseUser(orm.Base, UserPermissionMixin):
     __abstract__ = True
     id = _generate_user_id_column()
     email = Column(String(settings.EMAIL_FIELD_LENGTH), index=True,
                     nullable=False)
     password = Column(String(256), nullable=False)
     last_login = Column(TZAwareDateTime(tz=settings.TIME_ZONE),
-                        default=get_datetime_now, nullable=False, 
-                        onupdate=get_datetime_now)
+                        default=get_datetime_now, nullable=False)
     is_staff = Column(Boolean, default=False, nullable=False)
     is_superuser = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -230,18 +243,14 @@ class AbstractBaseUser(Base, UserPermissionMixin):
         return True
 
     def set_password(self, raw_password, algo=None):
-        '''Copy of :meth:`django.contrib.auth.models.User.set_password`.
-
-        The important difference: it takes an optional ``algo`` parameter,
-        which can change the hash method used to one-way encrypt the password.
-        The fallback used is the :setting:`AUTH_DIGEST_ALGORITHM` setting,
-        followed by the default in Django, ``sha1``.
+        self.password = make_password(raw_password)
         '''
         if not algo:
             algo = getattr(settings, 'AUTH_DIGEST_ALGORITHM', 'sha1')
         salt = self.generate_salt(algo)
         hsh = get_hexdigest(algo, salt, raw_password)
         self.password = '%s$%s$%s' % (algo, salt, hsh)
+        '''
 
     def check_password(self, raw_password):
         '''Tests if the password given matches the password of the user.'''
@@ -283,18 +292,22 @@ class AbstractBaseUser(Base, UserPermissionMixin):
         now = get_datetime_now()#str(timezone.now()).split('.')[0]
         if not username:
             raise ValueError('The given username must be set')
+        if not any(f in extra_fields for f in (cls.org_key, cls.org_key[:-3])):
+            extra_fields[User.org_key] = Organization.get_current_id()
+
         email = cls.normalize_email(email)
         user = cls(username=username, email=email, is_staff=is_staff,
                    is_active=True, is_superuser=is_superuser, 
                    last_login=now, date_joined=now, **extra_fields)
         user.set_password(password)
-        session = Session()
+        session = orm.sessionmaker()
         session.add(user)
         session.commit()
         return user
 
     @classmethod
     def create_user(cls, username, email=None, password=None, **extra_fields):
+        print 'create user2'
         return cls._create_user(username, email, password, False, False,
                                  **extra_fields)
 
@@ -345,9 +358,21 @@ setattr(BaseUser, Organization._meta.model_name,
     RelationshipProperty(Organization, backref=User._meta.model_name_plural))
 setattr(User, 'org_key', Organization._meta.model_name+'_id')
 
+if auth_settings.BAPH_AUTH_UNIQUE_EMAIL:
+    con = UniqueConstraint('email')
+elif auth_settings.BAPH_AUTH_UNIQUE_ORG_EMAIL:
+    con = UniqueConstraint(User.org_key, 'email')
+BaseUser.__table__.append_constraint(con)
+
+if auth_settings.BAPH_AUTH_UNIQUE_USERNAME:
+    con = UniqueConstraint(User.USERNAME_FIELD)
+elif auth_settings.BAPH_AUTH_UNIQUE_ORG_USERNAME:
+    con = UniqueConstraint(User.org_key, User.USERNAME_FIELD)
+BaseUser.__table__.append_constraint(con)
+
 # association classes
 
-class UserGroup(Base, Model):
+class UserGroup(orm.Base, Model):
     '''User groups'''
     __tablename__ = 'baph_auth_user_groups'
     __table_args__ = (
@@ -373,7 +398,7 @@ class UserGroup(Base, Model):
     group = relationship(Group, lazy=True, uselist=False,
         backref=backref('user_groups', lazy=True, uselist=True))
 
-class PermissionAssociation(Base, Model):
+class PermissionAssociation(orm.Base, Model):
     __tablename__ = 'baph_auth_permission_assoc'
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey(User.id))
@@ -392,7 +417,7 @@ MAX_SECRET_LEN = 255
 KEY_LEN = 32
 SECRET_LEN = 32
 
-class OAuthConsumer(Base, Model):
+class OAuthConsumer(orm.Base, Model):
     __tablename__ = 'auth_oauth_consumer'
     id = Column(Integer, ForeignKey(User.id), primary_key=True)
     key = Column(String(MAX_KEY_LEN), unique=True)
@@ -418,7 +443,7 @@ class OAuthConsumer(Base, Model):
         '''
         return oauth.OAuthConsumer(self.key, self.secret)
 
-class OAuthNonce(Base, Model):
+class OAuthNonce(orm.Base, Model):
     __tablename__ = 'auth_oauth_nonce'
     id = Column(Integer, primary_key=True)
     token_key = Column(String(32))

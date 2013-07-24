@@ -10,12 +10,12 @@ from baph.auth.models import User, Organization
 from baph.auth.registration import settings
 from baph.auth.registration.utils import get_protocol
 from baph.auth.utils import get_datetime_now, generate_sha1
-from baph.db import Session
+from baph.db.orm import ORM
 from baph.db.models import Base
 from baph.db.types import TZAwareDateTime
 
 
-
+orm = ORM.get()
 
 class BaphSignup(Base):
     __tablename__ = 'baph_signups'
@@ -152,6 +152,6 @@ class BaphSignup(Base):
         self.send_confirmation_email()
 
     def save(self):
-        session = Session()
+        session = orm.sessionmaker()
         session.add(self)
         session.commit()

@@ -10,9 +10,11 @@ from django.conf import settings
 from baph.auth.models import User
 from baph.auth.registration.models import BaphSignup
 from baph.auth.registration import settings as auth_settings
-from baph.db import Session
+from baph.db.orm import ORM
 from baph.test import TestCase
 
+
+orm = ORM.get()
 
 MUGSHOT_RE = re.compile('^[a-f0-9]{40}$')
 
@@ -49,7 +51,7 @@ class SignupModelTests(TestCase):
         user.date_joined -= datetime.timedelta(days=auth_settings.BAPH_ACTIVATION_DAYS + 1)
         user.save()
 
-        session = Session()
+        session = orm.sessionmaker()
         user = session.query(User).filter_by(username='alice').first()
         self.failUnless(user.signup.activation_key_expired())
 

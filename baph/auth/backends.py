@@ -8,9 +8,12 @@
 '''
 import django.core.validators
 
-from baph.auth.models import User
-from baph.db import Session
+from baph.auth.models import User, Organization
+from baph.auth.registration import settings as auth_settings
+from baph.db.orm import ORM
 
+
+orm = ORM.get()
 
 class SQLAlchemyBackend(object):
     '''Authentication backend using SQLAlchemy. See
@@ -25,7 +28,7 @@ class SQLAlchemyBackend(object):
         # TODO: Model, login attribute name and password attribute name
         # should be configurable.
         if not session:
-            session = Session()
+            session = orm.sessionmaker()
         user = session.query(User) \
                       .filter_by(username=username) \
                       .first()
@@ -39,18 +42,32 @@ class SQLAlchemyBackend(object):
 
     def get_user(self, user_id, session=None):
         if not session:
-            session = Session()
+            session = orm.sessionmaker()
         return session.query(User).get(user_id)
         
 class MultiSQLABackend(SQLAlchemyBackend):
     def authenticate(self, identification, password=None, check_password=True):
-        session = Session()
+        session = orm.sessionmaker()
         try:
             django.core.validators.validate_email(identification)
-            user = session.query(User).filter_by(email=identification).first()
+            if auth_settings.BAPH_AUTH_UNIQUE_EMAIL:
+                filters = {'email': identification}
+            elif auth_settings.BAPH_AUTH_UNIQUE_ORG_EMAIL:
+                filters = {
+                    'email': identification,
+                    User.org_key: Organization.get_current_id(),
+                    }
+            print 'filters:', filters
+            user = session.query(User).filter_by(**filters).first()
             if not user: return None
         except django.core.validators.ValidationError:
-            filters = {User.USERNAME_FIELD: identification}
+            if auth_settings.BAPH_AUTH_UNIQUE_USERNAME:
+                filters = {User.USERNAME_FIELD: identification}
+            elif auth_settings.BAPH_AUTH_UNIQUE_ORG_USERNAME:
+                filters = {
+                    User.USERNAME_FIELD: identification,
+                    User.org_key: Organization.get_current_id(),
+                    }
             user = session.query(User).filter_by(**filters).first()
             if not user: return None
         if check_password:

@@ -1,9 +1,7 @@
 [
 {  "__model__": "Organization",
     "id": 1,
-    "name": "Test Organization",
-    "subdomain": "test",
-    "contact_person": "Captain Crunch"},
+    "name": "Test Organization"},
 
 {  "__model__": "User",
     "id": 1,

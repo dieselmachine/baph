@@ -8,9 +8,12 @@ from django.utils.importlib import import_module
 
 from baph.core.management.base import NoArgsCommand, CommandError
 from baph.core.management.sql import emit_post_sync_signal #, sql_flush
-from baph.db import connections, Session, DEFAULT_DB_ALIAS
+from baph.db import connections, DEFAULT_DB_ALIAS
+from baph.db.orm import ORM
 from baph.db.models import Base, signals, get_apps, get_models
 
+
+orm = ORM.get()
 
 class Command(NoArgsCommand):
     option_list = NoArgsCommand.option_list + (
@@ -51,8 +54,8 @@ Are you sure you want to do this?
             confirm = 'yes'
 
         if confirm == 'yes':
+            session = orm.sessionmaker()
             try:
-                session = Session()
                 for table in reversed(Base.metadata.sorted_tables):
                     if table.info.get('preserve_during_flush', False):
                         continue

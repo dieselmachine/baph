@@ -12,9 +12,13 @@ from sqlalchemy.schema import CreateSchema, DropSchema, CreateTable
 
 from baph.core.management.base import NoArgsCommand
 from baph.core.management.sql import emit_post_sync_signal
-from baph.db import connections, Session, DEFAULT_DB_ALIAS
-from baph.db.models import Base, signals, get_apps, get_models
+from baph.db import connections, DEFAULT_DB_ALIAS
+from baph.db.orm import ORM
+from baph.db.models import signals, get_apps, get_models
 
+
+orm = ORM.get()
+Base = orm.Base
 
 def get_tablename(obj):
     if hasattr(obj, '__table__'):
@@ -148,8 +152,16 @@ class Command(NoArgsCommand):
             if schema not in existing_schemas:
                 schema_manifest.add(schema)
 
-        table_manifest = sorted(table_manifest, key=lambda x: 
-            all_tables.index(get_tablename(x[1])))
+        print 'all_tables:', sorted(all_tables)
+        for app, model in table_manifest:
+            print app, model, get_tablename(model)
+
+        
+        seen_tables = [t for t in table_manifest if get_tablename(t[1]) in all_tables]
+        other_tables = [t for t in table_manifest if get_tablename(t[1]) not in all_tables]
+
+        table_manifest = sorted(seen_tables, key=lambda x: 
+            all_tables.index(get_tablename(x[1]))) + other_tables
 
         if verbosity >= 3:
             print 'Schema Manifest:\n'
