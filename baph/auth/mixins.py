@@ -143,10 +143,13 @@ class UserPermissionMixin(object):
     def get_current_permissions(self):
         if hasattr(self, '_perm_cache'):
             return self._perm_cache
-
+        from baph.auth.models import Organization
+        current_org_id = Organization.get_current_id()
         perms = {}
-        for wl, wl_perms in self.get_all_permissions().items():
-            for rsrc, rsrc_perms in wl_perms.items():
+        for org_id, org_perms in self.get_all_permissions().items():
+            if not org_id in (None, current_org_id):
+                continue
+            for rsrc, rsrc_perms in org_perms.items():
                 if not rsrc in perms:
                     perms[rsrc] = {}
                 for action, action_perms in rsrc_perms.items():
