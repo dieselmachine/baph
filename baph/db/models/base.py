@@ -264,6 +264,15 @@ class ModelBase(type):
             pass
         return cls._meta.model_name
 
+    @property
+    def base_class(cls):
+        try:
+            if cls.__mapper__.polymorphic_on is not None:
+                return cls.__mapper__.primary_base_mapper.class_
+        except:
+            pass
+        return cls
+
 
 Base = declarative_base(cls=Model, 
     metaclass=ModelBase,
