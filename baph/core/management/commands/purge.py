@@ -134,6 +134,8 @@ and DELETE ALL TABLES AND SCHEMAS. Are you sure you want to do this?
             if verbosity >= 1:
                 self.stdout.write("Dropping constraints\n")
             for fkc in all_fks:
+                if verbosity >= 1:
+                    self.stdout.write("\t%s\n" % fkc)
                 conn.execute(DropConstraint(fkc))
 
             if verbosity >= 1:
