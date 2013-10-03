@@ -109,6 +109,8 @@ and DELETE ALL TABLES AND SCHEMAS. Are you sure you want to do this?
                     if verbosity >= 3:
                         self.stdout.write("\t%s.%s\n" % (schema,name))    
 
+            if verbosity >= 1:
+                self.stdout.write("Starting inspector\n")
             inspector = reflection.Inspector.from_engine(engine)
             metadata = MetaData()
             all_fks = []
@@ -129,12 +131,18 @@ and DELETE ALL TABLES AND SCHEMAS. Are you sure you want to do this?
                 tables.append(t)
                 all_fks.extend(fks)
 
+            if verbosity >= 1:
+                self.stdout.write("Dropping constraints\n")
             for fkc in all_fks:
                 conn.execute(DropConstraint(fkc))
 
+            if verbosity >= 1:
+                self.stdout.write("Dropping tables\n")
             for table in tables:
                 conn.execute(DropTable(table))
 
+            if verbosity >= 1:
+                self.stdout.write("Dropping schemas\n")
             for schema in schemas:
                 conn.execute(DropSchema(schema))
         else:
