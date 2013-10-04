@@ -136,6 +136,8 @@ and DELETE ALL TABLES AND SCHEMAS. Are you sure you want to do this?
             for fkc in all_fks:
                 if verbosity >= 1:
                     self.stdout.write("\t%s\n" % fkc)
+                print conn.execute('show open tables')
+                print conn.execute('show engine innodb status')
                 conn.execute(DropConstraint(fkc))
 
             if verbosity >= 1:
