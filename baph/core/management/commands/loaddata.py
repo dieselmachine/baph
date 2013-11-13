@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 
+import datetime
 import glob
 import gzip
 from itertools import product
@@ -72,6 +73,9 @@ class Command(BaseCommand):
         self.loaddata(fixture_labels)
 
     def loaddata(self, fixture_labels):
+        print '[%s] loaddata start' \
+            % datetime.datetime.now().time().isoformat()
+
         connection = orm = ORM.get(self.using)
 
         # Keep a count of the installed objects and fixtures
@@ -130,6 +134,9 @@ class Command(BaseCommand):
         """
         Loads fixtures files for a given label.
         """
+        print '[%s] load_label: %s' \
+            % (datetime.datetime.now().time().isoformat(), fixture_label)
+
         session = orm.sessionmaker()
         session.expunge_all()
         
@@ -194,6 +201,8 @@ class Command(BaseCommand):
         """
         Finds fixture files for a given label.
         """
+        print '[%s] _find_fixtures start' \
+            % datetime.datetime.now().time().isoformat()
         fixture_name, ser_fmt, cmp_fmt = self.parse_name(fixture_label)
         #databases = [self.using, None]
         cmp_fmts = list(self.compression_formats.keys()) if cmp_fmt is None else [cmp_fmt]
@@ -243,6 +252,8 @@ class Command(BaseCommand):
         if fixture_name != 'initial_data' and not fixture_files:
             # Warning kept for backwards-compatibility; why not an exception?
             warnings.warn("No fixture named '%s' found." % fixture_name)
+        print '[%s] _find_fixtures end' \
+            % datetime.datetime.now().time().isoformat()
 
         return fixture_files
 
