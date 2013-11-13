@@ -1,3 +1,4 @@
+import datetime
 import logging
 import sys
 import os
@@ -35,6 +36,7 @@ class Command(BaseCommand):
     requires_model_validation = False
 
     def __init__(self):
+        print '[%s] Test command init' % datetime.datetime.now().time().isoformat()
         self.test_runner = None
         super(Command, self).__init__()
 
