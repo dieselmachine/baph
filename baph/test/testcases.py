@@ -2,6 +2,7 @@ try:
     import json
 except:
     import simplejson as json
+import datetime
 import time
 
 from django.core.management import call_command
@@ -23,6 +24,8 @@ class TestCase(DjangoTestCase):
     reset_sequences = False
 
     def _fixture_setup(self):
+        print '[%s] baph.TestCase _fixture_setup start' \
+            % datetime.datetime.now().time().isoformat()
         if hasattr(self, 'fixtures'):
             params = {
                 'verbosity': 0,
@@ -30,6 +33,8 @@ class TestCase(DjangoTestCase):
                 'skip_validation': True,
                 'commit': False,
                 }
+            print '[%s] pre-loaddata call' \
+                % datetime.datetime.now().time().isoformat()
             call_command('loaddata', *self.fixtures, **params)
         session = orm.sessionmaker()
         session.expunge_all()
