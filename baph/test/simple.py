@@ -1,3 +1,4 @@
+import sys
 import unittest as real_unittest
 
 from django.conf import settings
@@ -255,7 +256,8 @@ class BaphTestSuiteRunner(object):
 
     def run_suite(self, suite, **kwargs):
         return unittest.TextTestRunner(verbosity=self.verbosity, 
-                               failfast=self.failfast) \
+                               failfast=self.failfast,
+                               stream=sys.stdout) \
             .run(suite)
 
     def teardown_databases(self, old_config, **kwargs):
