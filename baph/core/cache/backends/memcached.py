@@ -14,11 +14,15 @@ class BaphMemcachedCache(MemcachedCache):
         self._cache.delete_multi(keys)
 
     def flush_all(self):
+        print 'cache.flush_all called'
         for s in self._cache.servers:
+            print 'flushing server', s
             if not s.connect(): continue
             s.send_cmd('flush_all')
             s.expect("OK")
+            print 'OK received'
             self.delete_many_raw(self.get_server_keys(s))
+            print 'delete_many completed'
 
     def get_all_keys(self):
         keys = set()
@@ -28,9 +32,12 @@ class BaphMemcachedCache(MemcachedCache):
 
     def get_server_keys(self, s):
         keys = set()
+        print 'getting slabs'
         slab_ids = self.get_server_slab_ids(s)
+        print 'getting keys'
         for slab_id in slab_ids:
             keys.update(self.get_slab_keys(s, slab_id))
+        print 'returning keys'
         return keys
 
     def get_slab_keys(self, s, slab_id):
