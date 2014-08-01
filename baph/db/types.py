@@ -6,10 +6,7 @@
 .. moduleauthor:: Mark Lee <markl@evomediagroup.com>
 .. moduleauthor:: Gerald Thibault <jt@evomediagroup.com>
 '''
-try:
-    import json
-except ImportError:
-    import simplejson as json
+import json
 import datetime
 import uuid
 import re

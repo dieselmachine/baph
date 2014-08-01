@@ -12,12 +12,13 @@ from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
 from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 
+from baph.apps import apps
 from baph.db import types
 from baph.db.models.fields import Field
 from baph.utils.text import camel_case_to_spaces
 
 
-DEFAULT_NAMES = ('model_name', 'model_name_plural',
+DEFAULT_NAMES = ('apps', 'model_name', 'model_name_plural',
                  'verbose_name', 'verbose_name_plural', 
                  'app_label', 'swappable', 'auto_created',
                  'cache_alias', 'cache_timeout', 'cache_pointers',
@@ -97,6 +98,17 @@ class Options(object):
         self.swappable = None
         self.auto_created = False
         self.required_fields = None
+        
+        self.apps = apps
+
+    @property
+    def app_config(self):
+        # Don't go through get_app_config to avoid triggering imports.
+        return self.apps.app_configs.get(self.app_label)
+
+    @property
+    def installed(self):
+        return self.app_config is not None
 
     def contribute_to_class(self, cls, name):
         cls._meta = self

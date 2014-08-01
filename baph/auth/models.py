@@ -26,7 +26,6 @@ from sqlalchemy.orm import (relationship, backref, object_session,
 from baph.auth.mixins import UserPermissionMixin
 from baph.auth.registration import settings as auth_settings
 from baph.db import ORM
-from baph.db.models.loading import cache
 from baph.db.types import UUID, Dict, List
 from baph.utils.strings import random_string
 from baph.utils.importing import remove_class

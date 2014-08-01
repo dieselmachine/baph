@@ -1,23 +1,22 @@
-try:
-    import json
-except:
-    import simplejson as json
+import json
 import time
 
-from django.core.management import call_command
 from django.test import TestCase as DjangoTestCase
 
+from baph.core.management import call_command
 from baph.db.orm import ORM
+from baph.test.client import Client
 
 
 orm = ORM.get()
 
 class TestCase(DjangoTestCase):
 
+    client_class = Client
     reset_sequences = False
 
     def _fixture_setup(self):
-        if hasattr(self, 'fixtures'):
+        if hasattr(self, 'fixtures') and self.fixtures:
             params = {
                 'verbosity': 0,
                 'database': None, 

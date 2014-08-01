@@ -15,11 +15,9 @@ except:
     from django.template.defaultfilters import slugify
 from sqlalchemy.ext.declarative import has_inherited_table
 
+from baph.apps import apps
 from baph.auth import models as auth_app #, get_user_model
-from baph.db.models import get_models
 from baph.db.orm import Base, ORM
-#from baph.db import Session
-#from baph.db.models import signals, get_models
 
 
 orm = ORM.get()

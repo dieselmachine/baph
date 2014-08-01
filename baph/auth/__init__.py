@@ -4,7 +4,6 @@
 from datetime import datetime
 from django.contrib.auth import (SESSION_KEY, BACKEND_SESSION_KEY,
     load_backend, user_logged_in)
-from django.contrib.auth.models import AnonymousUser
 
 
 def login(request, user):
@@ -34,6 +33,7 @@ def login(request, user):
             request.session.flush()
     else:
         request.session.cycle_key()
+
     request.session[SESSION_KEY] = user.id
     request.session[BACKEND_SESSION_KEY] = user.backend
     if hasattr(request, 'user'):

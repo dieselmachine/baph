@@ -11,7 +11,7 @@ Attachment: country_and_language_fields_trunk.4.patch
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.utils.translation import ugettext as _
+from django.utils.translation import ugettext_lazy as _
 
 # Countries list - ISO 3166-1
 # http://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
@@ -259,7 +259,7 @@ COUNTRIES = (
 )
 
 
-def sorted_countries(countries):
+def sorted_countries(countries=COUNTRIES):
     """ Sort countries for a given language.
         Assume ZZ is the last entry, keep it last.
     """
@@ -268,7 +268,7 @@ def sorted_countries(countries):
     c.append(countries[-1])
     return(tuple(c))
 
-COUNTRIES = sorted_countries(COUNTRIES)
+#COUNTRIES = sorted_countries(COUNTRIES)
 
 
 def isValidLanguage(field_data, all_data):

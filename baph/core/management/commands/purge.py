@@ -5,7 +5,7 @@ import traceback
 
 from django.conf import settings
 from django.core.management import call_command
-from django.core.management.base import NoArgsCommand
+
 from django.core.management.color import no_style
 #from django.core.management.sql import custom_sql_for_model, emit_post_sync_signal
 from django.dispatch import Signal
@@ -15,8 +15,8 @@ from sqlalchemy import MetaData, inspect
 from sqlalchemy.engine import reflection
 from sqlalchemy.schema import CreateSchema, DropSchema, CreateTable, DropTable, DropConstraint, ForeignKeyConstraint, Table, MetaData
 
+from baph.core.management.base import NoArgsCommand
 from baph.db import DEFAULT_DB_ALIAS
-from baph.db.models import signals, get_apps, get_models
 from baph.db.orm import ORM
 
 
@@ -49,7 +49,7 @@ class Command(NoArgsCommand):
     help = "Delete the database tables and schemas for all apps in INSTALLED_APPS."
 
     def handle_noargs(self, **options):
-        verbosity = 1 #int(options.get('verbosity'))
+        verbosity = int(options.get('verbosity'))
         interactive = options.get('interactive')
         show_traceback = options.get('traceback')
 
@@ -75,7 +75,7 @@ class Command(NoArgsCommand):
                     raise
 
         if interactive:
-            confirm = raw_input("""You have requested a purghe of the database.
+            confirm = raw_input("""You have requested a purge of the database.
 This will IRREVERSIBLY DESTROY all data currently in the database,
 and DELETE ALL TABLES AND SCHEMAS. Are you sure you want to do this?
 

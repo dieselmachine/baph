@@ -1,7 +1,4 @@
-try:
-    import json
-except:
-    import simplejson as json
+import json
 
 from django import forms
 from django.core import validators

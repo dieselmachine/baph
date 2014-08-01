@@ -4,8 +4,8 @@ from sqlalchemy import inspect
 from sqlalchemy.ext.declarative.clsregistry import _class_resolver
 from sqlalchemy.orm import lazyload
 
+from baph.apps import apps
 from baph.db import ORM
-from baph.db.models.loading import cache
 
 
 def column_to_attr(cls, col):

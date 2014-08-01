@@ -2,14 +2,14 @@
 from optparse import make_option
 
 from django.conf import settings
-from django.core.management import call_command
 from django.core.management.color import no_style
 from django.utils.importlib import import_module
 
+from baph.apps import apps
+from baph.core.management import call_command
 from baph.core.management.base import NoArgsCommand, CommandError
-from baph.core.management.sql import emit_post_sync_signal #, sql_flush
+from baph.core.management.sql import emit_post_migrate_signal
 from baph.db import ORM, DEFAULT_DB_ALIAS
-from baph.db.models import signals, get_apps, get_models
 
 
 orm = ORM.get()
@@ -83,11 +83,14 @@ The full error: %s""")
             # applications to respond as if the database had been
             # sync'd from scratch.
             all_models = []
-            for app in get_apps():
+            for app_config in apps.get_app_configs():
+                if app_config.models_module is None:
+                    continue
                 all_models.extend([
-                    m for m in get_models(app, include_auto_created=True)
+                    m for m in apps.get_models(app_config.models_module,
+                                               include_auto_created=True)
                 ])
-            emit_post_sync_signal(set(all_models), verbosity, interactive, None) 
+            emit_post_migrate_signal(set(all_models), verbosity, interactive, None) 
 
             # Reinstall the initial_data fixture.
             if options.get('load_initial_data'):
