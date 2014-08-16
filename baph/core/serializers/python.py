@@ -3,7 +3,6 @@ from sqlalchemy.orm.util import identity_key
 
 from baph.core.serializers import base
 from baph.db import DEFAULT_DB_ALIAS
-from baph.db.models import get_apps
 from baph.db.orm import Base
 
 
@@ -44,8 +43,8 @@ def Deserializer(object_list, **options):
     It's expected that you pass the Python objects themselves (instead of a
     stream or a string) to the constructor
     """
-    db = options.pop('using', DEFAULT_DB_ALIAS)
-    get_apps()
+    #db = options.pop('using', DEFAULT_DB_ALIAS)
+    #get_apps()
     for d in object_list:
         # Look up the model and starting build a dict of data for it.
         Model = _get_model(d.pop('__model__'))

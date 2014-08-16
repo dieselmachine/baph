@@ -16,8 +16,8 @@ except:
 from django.contrib.auth.management import get_system_username
 from sqlalchemy.ext.declarative import has_inherited_table
 
+from baph.apps import apps
 from baph.contrib.auth import models as auth_app
-from baph.db.models import get_models
 from baph.db.orm import Base, ORM
 from baph.db.models import signals
 

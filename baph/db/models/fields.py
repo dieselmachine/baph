@@ -8,6 +8,7 @@ from django.utils.encoding import smart_text, force_text, force_bytes
 from django.utils.text import capfirst
 from sqlalchemy import *
 from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
+from sqlalchemy.ext.declarative.clsregistry import _class_resolver
 from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
 from sqlalchemy.ext.orderinglist import OrderingList
 from sqlalchemy.orm.collections import MappedCollection
@@ -50,6 +51,8 @@ def get_related_class_from_attr(attr):
     if hasattr(related_cls, 'is_mapper') and related_cls.is_mapper:
         # we found a mapper, grab the class from it
         related_cls = related_cls.class_
+    if isinstance(related_cls, _class_resolver):
+        related_cls = related_cls()
     return related_cls
 
 def normalize_collection_class(collection_class):
@@ -74,6 +77,7 @@ class Field(object):
                   default=None, data_type=None, auto_created=False,
                   auto=False, collection_class=None, proxy=False,
                   help_text='', choices=None, uselist=False, required=False,
+                  max_length=None
                 ):
         self.name = name
         self.verbose_name = verbose_name or capfirst(self.name)
@@ -88,6 +92,7 @@ class Field(object):
         self.collection_class = collection_class
         self.uselist = uselist
         self.required = required
+        self.max_length = max_length
 
         # Adjust the appropriate creation counter, and save our local copy.
         if auto_created:
@@ -220,6 +225,9 @@ class Field(object):
                 kwargs['required'] = True
             else:
                 kwargs['required'] = False
+            if hasattr(col.type, 'length'):
+                kwargs['max_length'] = col.type.length
+
         else:
             # multiple join elements, make it readonly
             kwargs['editable'] = False

@@ -2,10 +2,11 @@ from __future__ import absolute_import
 from collections import defaultdict
 from importlib import import_module
 import sys
+import warnings
 
 from django.conf import settings
 from django.forms import ValidationError
-from django.shortcuts import resolve_url
+from django.utils.deprecation import RemovedInDjango19Warning
 from sqlalchemy import event, inspect
 from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
 from sqlalchemy.ext.compiler import compiles
@@ -19,8 +20,9 @@ from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 from sqlalchemy.orm.util import has_identity, identity_key
 from sqlalchemy.schema import ForeignKeyConstraint
 
+from baph.apps import apps
+from baph.apps.config import MODELS_MODULE_NAME
 from baph.db import ORM
-from baph.db.models.loading import get_model, register_models
 from baph.db.models.mixins import CacheMixin, ModelPermissionMixin
 from baph.db.models.options import Options
 from baph.db.models import signals
@@ -88,6 +90,11 @@ def set_polymorphic_base_mapper(mapper_, class_):
 
 class Model(CacheMixin, ModelPermissionMixin):
 
+    def __init__(self, *args, **kwargs):
+        signals.pre_init.send(sender=self.__class__, args=args, kwargs=kwargs)
+        super(Model, self).__init__(self, *args, **kwargs)
+        signals.post_init.send(sender=self.__class__, instance=self)
+
     @classmethod
     def list_actions(cls, user, ns):
         for action in cls._meta.list_actions:
@@ -111,23 +118,6 @@ class Model(CacheMixin, ModelPermissionMixin):
                 obj_name = self._meta.object_name
             if user.has_obj_perm(obj_name, action, self):
                 yield (label, view, args)
-
-    '''
-    def actions(self, user, ns=None):
-        cls, args = identity_key(instance=self)
-        #action_pk = getattr(self._meta, 'action_pk', 'id')
-        for label, action, view in getattr(self._meta, 'actions', []):
-            if ns:
-                view = '%s:%s' % (ns, view)
-            if action.find('.') > -1:
-                obj_name, action = action.split('.', 1)
-            else:
-                obj_name = self._meta.object_name
-            if user.has_obj_perm(obj_name, action, self):
-                if hasattr(self._meta, 'action_pk'):
-                    args = [getattr(self, self._meta.action_pk)]
-                yield (label, resolve_url(view, *args))
-    '''
 
     @classmethod
     def create(cls, *args, **kwargs):
@@ -206,6 +196,7 @@ class ModelBase(type):
 
     def __new__(cls, name, bases, attrs):
         #print '%s.__new__(%s)' % (name, cls)
+
         req_sub = attrs.pop('__requires_subclass__', False)
 
         super_new = super(ModelBase, cls).__new__
@@ -217,7 +208,6 @@ class ModelBase(type):
 
         module = attrs.pop('__module__')
         new_class = super_new(cls, name, bases, {'__module__': module})
-
         # check the class registry to see if we created this already
         if name in new_class._decl_class_registry:
             return new_class._decl_class_registry[name]
@@ -229,15 +219,56 @@ class ModelBase(type):
             meta = attr_meta
         base_meta = getattr(new_class, '_meta', None)
 
+        # Look for an application configuration to attach the model to.
+        app_config = apps.get_containing_app_config(module)
+
         if getattr(meta, 'app_label', None) is None:
-            model_module = sys.modules[new_class.__module__]
-            kwargs = {"app_label": model_module.__name__.rsplit('.',1)[0]}
+
+            if app_config is None:
+                # If the model is imported before the configuration for its
+                # application is created (#21719), or isn't in an installed
+                # application (#21680), use the legacy logic to figure out the
+                # app_label by looking one level up from the package or module
+                # named 'models'. If no such package or module exists, fall
+                # back to looking one level up from the module this model is
+                # defined in.
+
+                # For 'django.contrib.sites.models', this would be 'sites'.
+                # For 'geo.models.places' this would be 'geo'.
+
+                msg = (
+                    "Model class %s.%s doesn't declare an explicit app_label "
+                    "and either isn't in an application in INSTALLED_APPS or "
+                    "else was imported before its application was loaded. " %
+                    (module, name))
+                if False: #abstract: #TODO: test SA __abstract__ here and see if it breaks
+                    msg += "Its app_label will be set to None in Django 1.9."
+                else:
+                    msg += "This will no longer be supported in Django 1.9."
+                warnings.warn(msg, RemovedInDjango19Warning, stacklevel=2)
+
+                model_module = sys.modules[new_class.__module__]
+                package_components = model_module.__name__.split('.')
+                package_components.reverse()  # find the last occurrence of 'models'
+                try:
+                    app_label_index = package_components.index(MODELS_MODULE_NAME) + 1
+                except ValueError:
+                    app_label_index = 1
+                #kwargs = {"app_label": package_components[app_label_index]}
+                kwargs = {"app_label": '.'.join(reversed(package_components[app_label_index:]))}
+
+            else:
+                kwargs = {"app_label": app_config.label}
+
         else:
             kwargs = {}
 
         new_class.add_to_class('_meta', Options(meta, **kwargs))
         print 'new class:', new_class
         if base_meta:
+            # Non-abstract child classes inherit some attributes from their
+            # non-abstract parent (unless an ABC comes before it in the
+            # method resolution order).
             for k,v in vars(base_meta).items():
                 if not getattr(new_class._meta, k, None):
                     setattr(new_class._meta, k, v)
@@ -249,7 +280,7 @@ class ModelBase(type):
                 # class under a second name
                 base_cls  = bases[0]
                 base_cls.add_to_class('_meta', new_class._meta)
-                register_models(base_cls._meta.app_label, base_cls)
+                new_class._meta.apps.register_model(base_cls._meta.app_label, base_cls)
                 return base_cls
 
             # class has been swapped out
@@ -280,10 +311,9 @@ class ModelBase(type):
         if attrs.get('__abstract__', None):
             return new_class
 
-        signals.class_prepared.send(sender=new_class)
-        register_models(new_class._meta.app_label, new_class)
-        return get_model(new_class._meta.app_label, name,
-                         seed_cache=False, only_installed=False)
+        new_class._prepare()
+        new_class._meta.apps.register_model(new_class._meta.app_label, new_class)
+        return new_class
 
     def __setattr__(cls, key, value):
         _add_attribute(cls, key, value)
@@ -293,6 +323,24 @@ class ModelBase(type):
             value.contribute_to_class(cls, name)
         else:
             setattr(cls, name, value)
+
+    def _prepare(cls):
+        """
+        Creates some methods once self._meta has been populated.
+        """
+        opts = cls._meta
+        #opts._prepare(cls)
+
+        # Give the class a docstring -- its definition.
+        '''
+        if cls.__doc__ is None:
+            cls.__doc__ = "%s(%s)" % (cls.__name__, ", ".join(f.attname for f in opts.fields))
+
+        if hasattr(cls, 'get_absolute_url'):
+            cls.get_absolute_url = update_wrapper(curry(get_absolute_url, opts, cls.get_absolute_url),
+                                                  cls.get_absolute_url)
+        '''
+        signals.class_prepared.send(sender=cls)
 
     def get_prop_from_proxy(cls, proxy):
         if proxy.scalar:

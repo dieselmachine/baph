@@ -14,7 +14,6 @@ except ImportError:
     has_bz2 = False
 
 from django.conf import settings
-from django.core.management.base import CommandError
 from django.core.management.color import no_style
 from django.core import serializers
 from django.utils.datastructures import SortedDict
@@ -23,9 +22,9 @@ from django.utils._os import upath
 from sqlalchemy.orm.util import identity_key
 from sqlalchemy.orm.attributes import instance_dict
 
-from baph.core.management.base import BaseCommand
+from baph.apps import apps
+from baph.core.management.base import BaseCommand, CommandError
 from baph.db import DEFAULT_DB_ALIAS
-from baph.db.models import get_app_paths
 from baph.db.orm import ORM
 
 
@@ -259,10 +258,12 @@ class Command(BaseCommand):
         current directory.
         """
         dirs = []
-        for path in get_app_paths():
-            d = os.path.join(os.path.dirname(path), 'fixtures')
-            if os.path.isdir(d):
-                dirs.append(d)
+        for app_config in apps.get_app_configs():
+            #if self.app_label and app_config.label != self.app_label:
+            #    continue
+            app_dir = os.path.join(app_config.path, 'fixtures')
+            if os.path.isdir(app_dir):
+                dirs.append(app_dir)
         dirs.extend(list(settings.FIXTURE_DIRS))
         dirs.append('')
         dirs = [upath(os.path.abspath(os.path.realpath(d))) for d in dirs]

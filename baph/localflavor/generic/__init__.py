@@ -259,7 +259,7 @@ COUNTRIES = (
 )
 
 
-def sorted_countries(countries):
+def sorted_countries(countries=COUNTRIES):
     """ Sort countries for a given language.
         Assume ZZ is the last entry, keep it last.
     """
@@ -268,7 +268,7 @@ def sorted_countries(countries):
     c.append(countries[-1])
     return(tuple(c))
 
-COUNTRIES = sorted_countries(COUNTRIES)
+#COUNTRIES = sorted_countries(COUNTRIES)
 
 
 def isValidLanguage(field_data, all_data):

@@ -32,7 +32,7 @@ class Command(BaseCommand):
             'entire site if no apps are specified.')
     args = '[appname ...]'
 
-    requires_model_validation = False
+    requires_model_validation = True
 
     def __init__(self):
         self.test_runner = None

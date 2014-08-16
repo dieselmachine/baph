@@ -1,6 +1,7 @@
 import re
 
 from django.conf import settings
+from django.core.cache import DEFAULT_CACHE_ALIAS, get_cache
 from django.utils.encoding import force_unicode
 from django.utils.functional import cached_property
 from django.utils.translation import (string_concat, get_language, activate,
@@ -11,17 +12,17 @@ from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
 from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 
+from baph.apps import apps
 from baph.db import types
 from baph.db.models.fields import Field
+from baph.utils.text import camel_case_to_spaces
 
 
-get_verbose_name = lambda class_name: \
-    re.sub('(((?<=[a-z])[A-Z])|([A-Z](?![A-Z]|$)))', ' \\1', class_name) \
-        .lower().strip()
-
-DEFAULT_NAMES = ('verbose_name', 'verbose_name_plural', 
+DEFAULT_NAMES = ('apps', 'model_name', 'model_name_plural',
+                 'verbose_name', 'verbose_name_plural', 
                  'app_label', 'swappable', 'auto_created',
-                 'cache_detail_keys', 'cache_list_keys', 'cache_pointers',
+                 'cache_alias', 'cache_timeout', 'cache_pointers',
+                 'cache_detail_fields', 'cache_list_fields',
                  'cache_relations', 'cache_cascades', 
                  'filter_translations', 'filter_initial',
                  'permissions', 'permission_scopes', 'form_class',
@@ -36,24 +37,10 @@ DEFAULT_NAMES = ('verbose_name', 'verbose_name_plural',
 
 class Options(object):
     def __init__(self, meta, app_label=None):
-        # cache_detail_keys are primary cache keys which are invalidated
-        # anytime the object changes. Because this key cannot exist prior
-        # to create of the object, these are not processed during CREATE.
-        # format: (cache_key_template, columns)
-        # cache_key_template is a string, with placeholders for formatting
-        # using data from the instance (ex: businesses:detail:id=%(id)s)
-        # columns is a list of columns to monitor for changes (ex: ['city'])
-        # the key will only be invalidated if at least one specified column
-        # has changed, or columns is None
-        self.cache_detail_keys = []
-        # cache_list_keys are keys for lists of objects. These keys are not
-        # singular keys, but "version keys", which are bases for multiple
-        # subsets of the base set (subsets being caused by filters or searches)
-        # format: (cache_key_template, columns) (same as above)
-        # when invalidated, rather than deleting the key, the key is
-        # incremented, so all subsets attempting to use the contained value
-        # for key generation will be invalidated at once
-        self.cache_list_keys = []
+        self.cache_alias = DEFAULT_CACHE_ALIAS
+        self.cache_timeout = None
+        self.cache_detail_fields = []
+        self.cache_list_fields = []
         # cache_pointers is a list of identity keys which contain no data
         # other than the primary key of the object being pointed at.
         # format: (cache_key_template, columns, name)
@@ -102,10 +89,6 @@ class Options(object):
         # value containing an expression which will be evaluated against the
         # permission's context
         self.permission_limiters = {}
-
-        #self.permission_actions = []
-        #self.permission_classes = []
-
         self.permission_full_parents = []
         self.permission_terminator = False
 
@@ -116,6 +99,7 @@ class Options(object):
         self.object_name, self.app_label = None, app_label
         self.model_name, self.model_name_plural = None, None
         self.verbose_name, self.verbose_name_plural = None, None
+        self.base_model_name, self.base_model_name_plural = None, None
         
         self.pk = None
         self.form_class = None
@@ -124,21 +108,30 @@ class Options(object):
         self.swappable = None
         self.auto_created = False
         self.required_fields = None
+        
+        self.apps = apps
+
+    @property
+    def app_config(self):
+        # Don't go through get_app_config to avoid triggering imports.
+        return self.apps.app_configs.get(self.app_label)
+
+    @property
+    def installed(self):
+        return self.app_config is not None
 
     def contribute_to_class(self, cls, name):
         cls._meta = self
         self.model = cls
-        self.installed = re.sub('\.models$', '', cls.__module__) \
-            in settings.INSTALLED_APPS
         # First, construct the default values for these options.
         self.object_name = cls.__name__
-        self.verbose_name = get_verbose_name(self.object_name)
-        if not self.model_name:
-            self.model_name = self.object_name.lower()
-            self.model_name_plural = self.model_name + 's'
+        self.model_name = self.object_name.lower()
+        self.verbose_name = camel_case_to_spaces(self.object_name)
+
+        self.original_attrs = {}
 
         # Next, apply any overridden values from 'class Meta'.
-        if getattr(self, 'meta', None):
+        if self.meta:
             meta_attrs = self.meta.__dict__.copy()
             for name in self.meta.__dict__:
                 # Ignore any private attributes that Django doesn't care about.
@@ -152,19 +145,42 @@ class Options(object):
                 elif hasattr(self.meta, attr_name):
                     setattr(self, attr_name, getattr(self.meta, attr_name))
 
-            # verbose_name_plural is a special case because it uses a 's'
-            # by default.
-            if self.verbose_name_plural is None:
-                self.verbose_name_plural = string_concat(self.verbose_name, 's')
-
             # Any leftover attributes must be invalid.
             if meta_attrs != {}:
                 raise TypeError("'class Meta' got invalid attribute(s): %s" 
                     % ','.join(meta_attrs.keys()))
-            del self.meta
-        else:
-            self.verbose_name_plural = string_concat(self.verbose_name, 's')
-        
+
+        # initialize params that depend on other params being set
+        if self.model_name_plural is None:
+            self.model_name_plural = self.model_name + 's'
+
+        if self.verbose_name_plural is None:
+            self.verbose_name_plural = self.verbose_name + 's'
+
+        if self.cache_timeout is None:
+            self.cache_timeout = get_cache(self.cache_alias).default_timeout
+
+        from baph.db import ORM
+        Base = ORM.get().Base
+
+        base_model_name = self.model_name
+        base_model_name_plural = self.model_name_plural
+        for base in self.model.__mro__:
+            if not issubclass(base, Base):
+                continue
+            if base in (self.model, Base):
+                continue
+            if not hasattr(base, '__mapper_args__'):
+                continue
+            if 'polymorphic_on' in base.__mapper_args__:
+                base_model_name = base._meta.base_model_name
+                base_model_name_plural = base._meta.base_model_name_plural
+                break
+        self.base_model_name = unicode(base_model_name)
+        self.base_model_name_plural = unicode(base_model_name_plural)
+
+        del self.meta
+
     def verbose_name_raw(self):
         """
         There are a few places where the untranslated verbose name is needed

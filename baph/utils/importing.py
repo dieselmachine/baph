@@ -223,12 +223,12 @@ def safe_import(path, replace_modules=[]):
     return getattr(sys.modules[mod], name)    
 
 def remove_class(cls, name):
-    from baph.db.models.loading import unregister_models
     subs = cls.__subclasses__()
     subs = [s for s in subs if s.__module__ != cls.__module__]
     if not subs:
         # unregister from AppCache
-        unregister_models(cls._meta.app_label, cls._meta.model_name)
+        cls._meta.apps.unregister_model(cls._meta.app_label, cls)
+        #unregister_models(cls._meta.app_label, cls._meta.model_name)
 
         # remove from SA class registry
         if cls.__name__ in cls._decl_class_registry:

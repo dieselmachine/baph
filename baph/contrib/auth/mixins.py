@@ -1,10 +1,11 @@
 from django.conf import settings
 from sqlalchemy import *
 from sqlalchemy import inspect
+from sqlalchemy.ext.declarative.clsregistry import _class_resolver
 from sqlalchemy.orm import lazyload
 
+from baph.apps import apps
 from baph.db import ORM
-from baph.db.models.loading import cache
 
 
 def column_to_attr(cls, col):
@@ -67,6 +68,8 @@ def key_to_value(obj, key):
         related_cls = prop.argument
         if isinstance(related_cls, type(lambda x:x)):
             related_cls = related_cls()
+        if isinstance(related_cls, _class_resolver):
+            related_cls = related_cls()
         related_col = prop.local_remote_pairs[0][0]
         attr_ = column_to_attr(previous_cls, related_col)
         related_key = attr_.key
@@ -97,6 +100,7 @@ def string_to_model(string):
 class PermissionStruct:
     def __init__(self, **entries): 
         self.__dict__.update(entries)
+        self._explicit = False
 
 class UserPermissionMixin(object):
 
@@ -125,7 +129,10 @@ class UserPermissionMixin(object):
             if user_group.key:
                 ctx[user_group.key] = user_group.value
             group = user_group.group
-            org_id = getattr(group, Organization._meta.model_name+'_id')
+            context = ctx.copy()
+            if group.context:
+                context.update(group.context)
+            org_id = str(getattr(group, Organization._meta.model_name+'_id'))
             if org_id not in permissions:
                 permissions[org_id] = {}
             perms = permissions[org_id]
@@ -137,9 +144,12 @@ class UserPermissionMixin(object):
                 if perm.action not in perms[model_name]:
                     perms[model_name][perm.action] = set()
                 perm = PermissionStruct(**perm.to_dict())
+                if user_group.key:
+                    perm._explicit = True
+                
                 if perm.value:
                     try:
-                        perm.value = perm.value % ctx
+                        perm.value = perm.value % context
                     except KeyError as e:
                         raise Exception('Key %s not found in permission '
                             'context. If this is a single-value permission, '
@@ -167,8 +177,7 @@ class UserPermissionMixin(object):
     def get_current_permissions(self):
         if hasattr(self, '_perm_cache'):
             return self._perm_cache
-        #from baph.contrib.auth.models import Organization
-        #current_org_id = Organization.get_current_id()
+
         perms = {}
         for org_id, org_perms in self.get_all_permissions().items():
             for rsrc, rsrc_perms in org_perms.items():
@@ -264,18 +273,23 @@ class UserPermissionMixin(object):
             parent_res = type(parent_obj).resource_name
             if action != 'view':
                 action = 'edit'
+            
             return self.has_obj_perm(parent_res, action, parent_obj)
 
         ctx = self.get_context()
         perms = self.get_resource_permissions(resource, action)
         if not perms:
+            # user has no valid permissions for this resource/action pair
             return False
             
         perm_map = {}
+        explicit = []
         for p in perms:
             if not p.key:
                 # this is a boolean permission (not a key/value filter)
                 return True
+            if p._explicit:
+                explicit.append(p.key)
             if not p.key in perm_map:
                 perm_map[p.key] = set()
             perm_map[p.key].add(p.value % ctx)
@@ -289,24 +303,46 @@ class UserPermissionMixin(object):
                 if not col_attr.key in perm_map:
                     perm_map[col_attr.key] = set([None])
 
+        add_errors = []
         for k,v in perm_map.items():
             keys = k.split(',')
             key_pieces = [key_to_value(obj, key) for key in keys]
             if key_pieces == [None]:
                 value = None
+            elif None in key_pieces:
+                # this object lacks the values required to form a key
+                # so this permission is irrelevant to the current obj
+                continue
             else:
                 value = ','.join(key_pieces)
 
-            if action == 'add':
-                # for adding items, all filters must match
-                if value and str(value) not in v:
-                    if v == set([None]):
-                        continue
-                    return False
-            else:
-                # for other actions, one relevant perm is enough
-                if value and str(value) in v:
+            if not value:
+                # no value to check
+                continue
+
+            if v == set([None]):
+                # no restriction on allowed values
+                continue
+
+            if str(value) in v:
+                if action == 'add':
+                    if k in explicit:
+                        # this perm indicates it can grant access and override
+                        # restrictions set by broader permissions. If the key/value
+                        # is set on the UserGroup (rather than the permission), the
+                        # permission will be 'explicit'
+                        return True
+                else:
+                    # for non-add permissions, a single matching filter will grant
+                    # access to the resource
                     return True
+            else:
+                if action == 'add':
+                    add_errors.append( (k, value, v) )
+                    continue
+        if add_errors:
+            return False
+
         return action == 'add'
 
     def get_resource_filters(self, resource, action='view'):
@@ -344,13 +380,14 @@ class UserPermissionMixin(object):
                     lookup, key = cls._meta.filter_translations[key].split('.',1)
                 else:
                     lookup = resource
-                cls = orm.Base._decl_class_registry[lookup]
+                cls_ = orm.Base._decl_class_registry[lookup]
 
                 frags = key.split('.')
                 attr = frags.pop()
                 for frag in frags:
-                    cls = cls.get_related_class(frag)
-                col = getattr(cls, attr)
+                    cls_ = cls_.get_related_class(frag)
+
+                col = getattr(cls_, attr)
                 filters.append(col==value)
 
             if len(filters) == 1:

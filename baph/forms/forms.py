@@ -145,6 +145,8 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
 
         if f.nullable or f.blank:
             kwargs['required'] = False
+        if f.max_length and 'collection_class' not in kwargs:
+            kwargs['max_length'] = f.max_length
 
         #if issubclass(f.data_type, Base):
         #    assert False

@@ -26,7 +26,6 @@ from sqlalchemy.orm import (relationship, backref, object_session,
 from baph.contrib.auth.mixins import UserPermissionMixin
 from baph.contrib.auth.registration import settings as auth_settings
 from baph.db import ORM
-from baph.db.models.loading import cache
 from baph.db.types import UUID, Dict, List
 from baph.utils.strings import random_string
 from baph.utils.importing import remove_class
@@ -134,6 +133,14 @@ class AbstractBaseOrganization(Base):
         else:
             return org.id
 
+    @classmethod
+    def get_column_key(cls):
+        return cls._meta.model_name+'_id'
+
+    @classmethod
+    def get_relation_key(cls):
+        return cls._meta.model_name
+
 class BaseOrganization(AbstractBaseOrganization):
     __tablename__ = 'baph_auth_organizations'
     __requires_subclass__ = True
@@ -149,6 +156,7 @@ class Organization(BaseOrganization):
 class AbstractBaseGroup(Base):
     __abstract__ = True
     id = Column(Integer, primary_key=True)
+    context = Column(Dict)
 
     users = association_proxy('user_groups', 'user',
         creator=lambda v: UserGroup(user=v))
@@ -213,7 +221,8 @@ class AbstractBaseUser(Base, UserPermissionMixin):
     date_joined = Column(DateTime, default=datetime.now, nullable=False)
 
     permissions = association_proxy('permission_assocs', 'permission')
-    codenames = association_proxy('permission_assocs', 'codename')
+    codenames = association_proxy('permission_assocs', 'codename',
+                                  creator=get_or_fail)
 
     # this is to allow the django password reset token generator to work
     @property
@@ -279,7 +288,7 @@ class AbstractBaseUser(Base, UserPermissionMixin):
                      **extra_fields):
         print '_create_user:', cls, username, email, password
         now = datetime.now()
-        if not username:
+        if not getattr(settings, 'BAPH_AUTH_WITHOUT_USERNAMES', False) and not username:
             raise ValueError('The given username must be set')
         if not any(f in extra_fields for f in (Organization.get_column_key(),
                                               Organization.get_relation_key())):
@@ -542,9 +551,9 @@ class OAuthConsumer(Base):
     def __init__(self, **kwargs):
         super(OAuthConsumer, self).__init__(**kwargs)
         if not self.key:
-            self.key = random_string(length=KEY_LEN)
+            self.key = random_string(size=KEY_LEN)
         if not self.secret:
-            self.secret = random_string(length=SECRET_LEN)
+            self.secret = random_string(size=SECRET_LEN)
 
     @classmethod
     def create(cls, user_id, **kwargs):

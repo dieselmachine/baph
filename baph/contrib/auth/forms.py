@@ -47,9 +47,13 @@ That e-mail address doesn't allow the password to be set.'''))
                 continue
             if not domain_override:
                 org = Organization.get_current(request=request)
-                site_name = org.name
-                domain = org.host
-                print org, org.name, org.host
+                if isinstance(org, dict):
+                    site_name = org['name']
+                    domain = org['host']
+                else:
+                    site_name = org.name
+                    domain = org.host
+
             else:
                 site_name = domain = domain_override
 

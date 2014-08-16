@@ -10,10 +10,10 @@ from django.utils.importlib import import_module
 from sqlalchemy import MetaData, create_engine
 from sqlalchemy.schema import CreateSchema, DropSchema, CreateTable
 
+from baph.apps import apps
 from baph.core.management.base import NoArgsCommand
 from baph.core.management.sql import emit_post_sync_signal
 from baph.db import DEFAULT_DB_ALIAS
-from baph.db.models import signals, get_apps, get_models
 from baph.db.orm import ORM, Base
 
 
@@ -139,8 +139,11 @@ class Command(NoArgsCommand):
         all_models = []
         if verbosity >= 1:
             self.stdout.write("Getting required models...\n")
-        for app in get_apps():
-            for model in get_models(app, include_auto_created=True):
+        for app_config in apps.get_app_configs():
+            if app_config.models_module is None:
+                continue
+            for model in apps.get_models(app_config.models_module,
+                                         include_auto_created=True):
                 app_name = app.__name__.rsplit('.',1)[0]
                 all_models.append( (app_name, model) )
                 if verbosity >= 3:
