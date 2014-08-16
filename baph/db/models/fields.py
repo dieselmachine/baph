@@ -12,10 +12,31 @@ from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
 from sqlalchemy.ext.orderinglist import OrderingList
 from sqlalchemy.orm.collections import MappedCollection
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
+from sqlalchemy.orm.util import identity_key
 
 from baph.db import types
 from baph.forms import fields
 
+
+FIELD_MAP = {
+    String:         forms.CharField,
+    Text:           forms.CharField,
+    Unicode:        forms.CharField,
+    UnicodeText:    forms.CharField,
+    Integer:        forms.IntegerField,
+    Float:          forms.FloatField,
+    DateTime:       forms.DateTimeField,
+    Date:           forms.DateField,
+    Time:           forms.TimeField,
+    Boolean:        forms.BooleanField,
+    }
+'''
+    types.Json:     fields.JsonField,
+    types.List:     fields.ListField,
+    types.Dict:     fields.DictField,
+    object:        fields.ObjectField,
+    }
+'''
 
 class NOT_PROVIDED:
     pass
@@ -103,6 +124,23 @@ class Field(object):
                 return self.default()
             return force_text(self.default, strings_only=True)
         return None
+
+    def as_form_field(self):
+        from baph.db.orm import Base
+        kwargs = {
+            'required': self.required,
+            'initial': self.default,
+            }
+        if issubclass(self.data_type, Base):
+            kwargs['related_class'] = self.data_type
+
+        if self.collection_class:
+            field = fields.MultiObjectField
+        elif issubclass(self.data_type, Base):
+            field = fields.ObjectField
+        else:
+            field = FIELD_MAP[self.data_type]
+        return field(**kwargs)
 
     def formfield(self, form_class=None, **kwargs):
         defaults = {'required': self.required,
@@ -209,6 +247,7 @@ class Field(object):
     @classmethod
     def field_kwargs_from_proxy(cls, key, attr, model):
         proxy = getattr(model, key)
+        #info = (attr.target_class, attr.value_attr)
         kwargs = cls.field_kwargs_from_attr(key, attr.remote_attr, model)
 
         collection_class = attr.local_attr.property.collection_class
@@ -224,3 +263,13 @@ class Field(object):
         kwargs['proxy'] = True
         kwargs['nullable'] = True
         return kwargs
+
+    def value_from_object(self, instance):
+        from baph.db.orm import ORM
+        orm = ORM.get()
+        Base = orm.Base
+        value = getattr(instance, self.name, None)
+        #if isinstance(value, Base):
+        #    cls, args = identity_key(instance=value)
+        #    value = ','.join(str(arg) for arg in args)
+        return value

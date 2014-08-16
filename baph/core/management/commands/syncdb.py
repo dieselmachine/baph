@@ -198,12 +198,13 @@ class Command(NoArgsCommand):
             created_models.add(model)
         orm.Base.metadata.create_all(bind=engine, tables=to_create)
 
-        # Send the post_syncdb signal
-        emit_post_sync_signal(created_models, verbosity, interactive, db)
-
         # Load initial_data fixtures (unless that has been disabled)
         if load_initial_data:
+            print 'load initial data'
             call_command('loaddata', 'initial_data', verbosity=verbosity,
                          database=db, skip_validation=True)
+
+        # Send the post_syncdb signal
+        emit_post_sync_signal(created_models, verbosity, interactive, db)
 
 

@@ -81,7 +81,7 @@ MIDDLEWARE_CLASSES = (
     'baph.middleware.orm.SQLAlchemyMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    'baph.auth.middleware.AuthenticationMiddleware',
+    'baph.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
 )
 
@@ -96,8 +96,8 @@ TEMPLATE_DIRS = (
 )
 
 INSTALLED_APPS = (
-    'baph.auth',
-    'baph.auth.registration',
+    'baph.contrib.auth',
+    'baph.contrib.auth.registration',
     'baph.db',
     'baph.piston',
     'baph.sites',
@@ -108,7 +108,7 @@ INSTALLED_APPS = (
 SESSION_ENGINE = 'django.contrib.sessions.backends.file'
 
 AUTHENTICATION_BACKENDS = (
-    'baph.auth.backends.SQLAlchemyBackend',
+    'baph.contrib.auth.backends.SQLAlchemyBackend',
 )
 
 # The length of the email field.

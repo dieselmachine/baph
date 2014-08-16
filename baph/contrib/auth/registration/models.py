@@ -6,10 +6,10 @@ from django.core.mail import send_mail
 from sqlalchemy import *
 from sqlalchemy.orm import relationship, backref, joinedload
 
-from baph.auth.models import User, Organization
-from baph.auth.registration import settings
-from baph.auth.registration.utils import get_protocol
-from baph.auth.utils import generate_sha1
+from baph.contrib.auth.models import User, Organization
+from baph.contrib.auth.registration import settings
+from baph.contrib.auth.registration.utils import get_protocol
+from baph.contrib.auth.utils import generate_sha1
 from baph.db import ORM
 
 

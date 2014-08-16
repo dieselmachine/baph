@@ -23,12 +23,15 @@ DEFAULT_NAMES = ('verbose_name', 'verbose_name_plural',
                  'app_label', 'swappable', 'auto_created',
                  'cache_detail_keys', 'cache_list_keys', 'cache_pointers',
                  'cache_relations', 'cache_cascades', 
-                 'filter_translations',
+                 'filter_translations', 'filter_initial',
                  'permissions', 'permission_scopes', 'form_class',
                  'permission_actions', 'permission_classes',
                  'permission_parents', 'permission_full_parents', 
                  'permission_limiters', 'permission_terminator',
                  'permission_handler', 'permission_resources',
+                 'action_pk', 'actions',
+                 'list_actions', 'detail_actions',
+                 'filtering', 'ordering', 'searchable',
                  )
 
 class Options(object):
@@ -73,9 +76,13 @@ class Options(object):
         self.permissions = {}
         self.permission_scopes = {}
         
+        self.filtering = []
         # filter_translations allows mapping of filter keys to 'full' filters
         # in the event the target column is in another table.
         self.filter_translations = {}
+        self.filter_initial = {}
+        self.ordering = []
+        self.searchable = []
 
         # permission_parents is a list of *toOne relations which can be
         # considered to refer to 'parents'. These relations will automatically
@@ -102,6 +109,8 @@ class Options(object):
         self.permission_full_parents = []
         self.permission_terminator = False
 
+        self.detail_actions = []
+        self.list_actions = []
 
         self.limit = 1000
         self.object_name, self.app_label = None, app_label
@@ -211,6 +220,7 @@ class Options(object):
         return self._field_name_cache
 
     def _fill_fields_cache(self):
+        print '\nfill fields cache'
         cache = []
         if not self.model.__mapper__.configured:
             configure_mappers()
@@ -223,6 +233,7 @@ class Options(object):
                 continue
             field = Field.field_from_attr(key, attr, self.model)
             cache.append((field, None))
+            print '\t', (key, attr)
         self._field_cache = tuple(cache)
         self._field_name_cache = [x for x, _ in cache]
 

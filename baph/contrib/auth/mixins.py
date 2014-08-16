@@ -111,16 +111,17 @@ class UserPermissionMixin(object):
             if perm.action not in permissions[model_name]:
                 permissions[model_name][perm.action] = set()
             perm = PermissionStruct(**perm.to_dict())
+            v = perm.value
             if perm.value:
                 perm.value = perm.value % ctx
             permissions[model_name][perm.action].add(perm)
         return permissions
 
     def get_group_permissions(self):
-        from baph.auth.models import Organization
+        from baph.contrib.auth.models import Organization
         ctx = self.get_context()
         permissions = {}
-        for user_group in self.groups:
+        for user_group in self.user_groups:
             if user_group.key:
                 ctx[user_group.key] = user_group.value
             group = user_group.group
@@ -166,12 +167,10 @@ class UserPermissionMixin(object):
     def get_current_permissions(self):
         if hasattr(self, '_perm_cache'):
             return self._perm_cache
-        from baph.auth.models import Organization
-        current_org_id = Organization.get_current_id()
+        #from baph.contrib.auth.models import Organization
+        #current_org_id = Organization.get_current_id()
         perms = {}
         for org_id, org_perms in self.get_all_permissions().items():
-            if not org_id in (None, current_org_id):
-                continue
             for rsrc, rsrc_perms in org_perms.items():
                 if not rsrc in perms:
                     perms[rsrc] = {}
@@ -194,6 +193,9 @@ class UserPermissionMixin(object):
         return perms
 
     def has_resource_perm(self, resource):
+        if self.is_superuser:
+            return True
+
         if not self.is_authenticated():
             # user is not logged in
             return False
@@ -201,6 +203,9 @@ class UserPermissionMixin(object):
         return bool(perms)
 
     def has_perm(self, resource, action, filters=None):
+        if self.is_superuser:
+            return True
+
         if not filters:
             filters = {}
         ctx = self.get_context()
@@ -213,6 +218,11 @@ class UserPermissionMixin(object):
         if not perms:
             # user has no applicable permissions
             return False
+
+        if not filters:
+            # this is a boolean check, testing if user has any perm
+            # allowing this action
+            return True
 
         orm = ORM.get()
         cls_name = tuple(perms)[0].resource
@@ -242,6 +252,9 @@ class UserPermissionMixin(object):
 
     def has_obj_perm(self, resource, action, obj):
         # TODO: auto-generate resource by checking base_mapper of polymorphics
+        if self.is_superuser:
+            return True
+
         if type(obj)._meta.permission_handler:
             # permissions for this object are based off parent object
             parent_obj = obj.get_parent(type(obj)._meta.permission_handler)

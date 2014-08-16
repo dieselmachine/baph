@@ -1,10 +1,11 @@
 from optparse import make_option
 
 from django.core.exceptions import ImproperlyConfigured
-from django.core.management.base import BaseCommand, CommandError
+from django.core.management.base import CommandError
 from django.core import serializers
 from django.utils.datastructures import SortedDict
 
+from baph.core.management.base import BaseCommand
 from baph.db import ORM, DEFAULT_DB_ALIAS
 from baph.db.models.loading import extract_app_name
 
@@ -127,10 +128,6 @@ class Command(BaseCommand):
 
 def sort_dependencies(app_list):
     """Sort a list of app,modellist pairs into a single list of models.
-
-    The single list of models is sorted so that any model with a natural key
-    is serialized before a normal model, and any model with a natural key
-    dependency has it's dependencies serialized first.
     """
     from baph.db.models import get_model, get_models
 
@@ -140,6 +137,10 @@ def sort_dependencies(app_list):
             model_list = get_models(app)
 
         for model in model_list:
+            for c in model.mro()[1:]: # mro[0] is model
+                if c in models:
+                    if c.__table__ is model.__table__:
+                        models.remove(c)
             models.add(model)
 
     tables = orm.Base.metadata.sorted_tables

@@ -31,7 +31,6 @@ def get_validation_errors(outfile, app=None):
     #from django.db.models.deletion import SET_NULL, SET_DEFAULT
 
     e = ModelErrorCollection(outfile)
-
     for (app_name, error) in get_app_errors().items():
         e.add(app_name, error)
 

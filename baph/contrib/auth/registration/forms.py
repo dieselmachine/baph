@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 '''
-:mod:`baph.auth.registration.forms` -- Registration-related Forms
+:mod:`baph.contrib.auth.registration.forms` -- Registration-related Forms
 =================================================================
 
 Forms and validation code for user registration.
@@ -13,10 +13,10 @@ from django.contrib.auth import authenticate
 from django.utils.translation import ugettext_lazy as _
 from sqlalchemy.orm import joinedload
 
-from baph.auth.models import User, Organization
-from baph.auth.registration import settings
-from baph.auth.registration.managers import SignupManager
-from baph.auth.utils import generate_sha1
+from baph.contrib.auth.models import User, Organization
+from baph.contrib.auth.registration import settings
+from baph.contrib.auth.registration.managers import SignupManager
+from baph.contrib.auth.utils import generate_sha1
 from baph.db.orm import ORM
 
 

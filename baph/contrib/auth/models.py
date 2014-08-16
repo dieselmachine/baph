@@ -23,8 +23,8 @@ from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import (relationship, backref, object_session,
     RelationshipProperty, clear_mappers)
 
-from baph.auth.mixins import UserPermissionMixin
-from baph.auth.registration import settings as auth_settings
+from baph.contrib.auth.mixins import UserPermissionMixin
+from baph.contrib.auth.registration import settings as auth_settings
 from baph.db import ORM
 from baph.db.models.loading import cache
 from baph.db.types import UUID, Dict, List
@@ -90,6 +90,15 @@ class Permission(Base):
     key = Column(String(100))
     value = Column(String(50))
 
+    def __unicode__(self):
+        return unicode(str(self))
+
+    def __str__(self):
+        return self.name
+        
+    def __repr__(self):
+        return '<Permission: %s (%s) %s:%s, %s=%s>' % (
+            self.name, self.codename, self.resource, self.action, self.key, self.value)
 
 # organization models
 
@@ -98,13 +107,26 @@ class AbstractBaseOrganization(Base):
     id = Column(Integer, primary_key=True)
 
     @classmethod
-    def get_current(cls):
-        raise NotImplemented('get_current must be defined on the '
+    def get_relation_key(cls):
+        return cls._meta.model_name
+
+    @classmethod
+    def get_column_key(cls):
+        return '%s_id' % cls.get_relation_key()
+
+    @classmethod
+    def get_current(cls, request=None):
+        raise ImproperlyConfigured('get_current must be defined on the '
             'custom Organization model')
 
     @classmethod
-    def get_current_id(cls):
-        org = cls.get_current()
+    def get_from_request(cls, request):
+        raise ImproperlyConfigured('get_from_request must be defined on the '
+            'custom Organization model')
+
+    @classmethod
+    def get_current_id(cls, request=None):
+        org = cls.get_current(request=request)
         if not org:
             return None
         if isinstance(org, dict):
@@ -143,20 +165,18 @@ class Group(BaseGroup):
     class Meta:
         swappable = 'BAPH_GROUP_MODEL'
 
-col_key = Organization._meta.model_name+'_id'
-col = getattr(BaseGroup.__table__.c, col_key, None)
-if col is None:
-    setattr(BaseGroup, col_key,
-        Column(Integer, ForeignKey(Organization.id), index=True))
+if not hasattr(Group, Organization.get_column_key()):
+    # add the org fk if not declared on the group class
+    col = Column(Integer, ForeignKey(Organization.id), index=True)
+    setattr(BaseGroup, Organization.get_column_key(), col)
 
-rel_key = Organization._meta.model_name
-rel = getattr(Group, rel_key, None)
-if rel is None:
-    rel = RelationshipProperty(Organization, 
+if not hasattr(Group, Organization.get_relation_key()):
+    # add the org relation if it wasn't declared on the group class
+    rel = RelationshipProperty(Organization,
         backref=Group._meta.model_name_plural,
-        foreign_keys=[getattr(BaseGroup, col_key)])
-    setattr(Group, rel_key, rel)
-    
+        foreign_keys=[getattr(BaseGroup, Organization.get_column_key())])
+    setattr(Group, Organization.get_relation_key(), rel)
+
 
 # user models
 
@@ -175,6 +195,9 @@ class AnonymousUser(object):
         return False
 
     def has_resource_perm(self, resource):
+        return False
+    
+    def has_perm(self, resource, action, filters=None):
         return False
 
 class AbstractBaseUser(Base, UserPermissionMixin):
@@ -254,12 +277,22 @@ class AbstractBaseUser(Base, UserPermissionMixin):
     @classmethod
     def _create_user(cls, username, email, password, is_staff, is_superuser,
                      **extra_fields):
+        print '_create_user:', cls, username, email, password
         now = datetime.now()
         if not username:
             raise ValueError('The given username must be set')
-        org_key = Organization._meta.model_name
-        if not any(f in extra_fields for f in (org_key, org_key+'_id')):
-            extra_fields[org_key+'_id'] = Organization.get_current_id()
+        if not any(f in extra_fields for f in (Organization.get_column_key(),
+                                              Organization.get_relation_key())):
+            # organization was not provided, try .get_current_id if available
+            try:
+                org_id = Organization.get_current_id()
+                extra_fields[Organization.get_column_key()] = org_id
+            except ImproperlyConfigured as e:
+                # get_current is not defined, org assignment is manual
+                pass
+            except Exception as e:
+                # No idea what caused this error
+                raise
 
         email = cls.normalize_email(email)
         user = cls(username=username, email=email, is_staff=is_staff,
@@ -325,19 +358,18 @@ class User(BaseUser):
     class Meta:
         swappable = 'BAPH_USER_MODEL'
 
-col_key = Organization._meta.model_name+'_id'
-#col = getattr(BaseUser.__table__.c, col_key, None)
-#if col is None:
-setattr(BaseUser, col_key,
-    Column(Integer, ForeignKey(Organization.id), index=True))
+if not hasattr(User, Organization.get_column_key()):
+    col = Column(Integer, ForeignKey(Organization.id), index=True)
+    setattr(BaseUser, Organization.get_column_key(), col)
 
-rel_key = Organization._meta.model_name
-#rel = getattr(User, rel_key, None)
-#if rel is None:
-rel = RelationshipProperty(Organization, 
-    backref=User._meta.model_name_plural,
-    foreign_keys=[getattr(BaseUser, col_key)])
-setattr(User, rel_key, rel)
+if not hasattr(User, Organization.get_relation_key()):
+    # add the org relation if it wasn't declared on the user class
+    rel = RelationshipProperty(Organization,
+        backref=User._meta.model_name_plural,
+        foreign_keys=[
+            getattr(User, Organization.get_column_key()),
+            ])
+    setattr(User, Organization.get_relation_key(), rel)
 
 if auth_settings.BAPH_AUTH_UNIQUE_WITHIN_ORG:
     args = [col_key]
@@ -358,7 +390,6 @@ class UserGroup(Base):
     '''User groups'''
     __tablename__ = 'baph_auth_user_groups'
     __table_args__ = (
-        PrimaryKeyConstraint('user_id', 'group_id', 'key', 'value'),
         Index('idx_group_context', 'group_id', 'key', 'value'),
         Index('idx_context', 'key', 'value'),
         )
@@ -367,24 +398,81 @@ class UserGroup(Base):
         permission_parents = ['user']
         permission_handler = 'user'
 
+    id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey(User.id), nullable=False)
     group_id = Column(Integer, ForeignKey(Group.id), nullable=False)
-    key = Column(String(32), default='')
-    value = Column(String(32), default='')
+    key = Column(String(32))
+    value = Column(String(32))
 
+if not hasattr(User, 'user_groups'):
+    print 'adding user_groups to User'
+    rel = RelationshipProperty(UserGroup,
+        backref='user',
+        foreign_keys=[UserGroup.user_id])
+    setattr(User, 'user_groups', rel)
+
+if not hasattr(Group, 'user_groups'):
+    print 'adding user_groups to Group'
+    rel = RelationshipProperty(UserGroup,
+        backref='group',
+        foreign_keys=[UserGroup.group_id])
+    setattr(Group, 'user_groups', rel)
+
+if not hasattr(UserGroup, Organization.get_column_key()):
+    col = Column(Integer, ForeignKey(Organization.id), index=True)
+    setattr(UserGroup, Organization.get_column_key(), col)
+
+if not hasattr(UserGroup, Organization.get_relation_key()):
+    rel = RelationshipProperty(Organization,
+        backref=UserGroup._meta.model_name_plural,
+        foreign_keys=[getattr(UserGroup, Organization.get_column_key())])
+    setattr(UserGroup, Organization.get_relation_key(), rel)
+
+"""
     user = relationship(User, backref=backref('groups',
         cascade='all, delete-orphan'))
     group = relationship(Group, backref=backref('user_groups',
         cascade='all, delete-orphan'))
 
+"""
+
+"""
+if not hasattr(UserGroup, 'local_user'):
+    rel = RelationshipProperty(User,
+        backref='local_%s' % UserGroup._meta.model_name_plural,
+        foreign_keys=[
+            getattr(UserGroup, Organization.get_column_key()),
+            getattr(UserGroup, 'user_id'),
+            ])
+    setattr(UserGroup, 'local_user', rel)
+"""
+"""
+table_args = getattr(UserGroup, '__table_args__', tuple())
+
+fk = ForeignKeyConstraint(
+    [getattr(UserGroup, Organization.get_column_key()), UserGroup.user_id],
+    [getattr(User, Organization.get_column_key()), User.id],
+    )
+
+uq = UniqueConstraint(
+    getattr(UserGroup, Organization.get_column_key()),
+    UserGroup.user_id,
+    UserGroup.group_id,
+    UserGroup.key,
+    UserGroup.value)
+
+UserGroup.__table_args__ = (fk, uq) + table_args
+"""
+#
+
 class PermissionAssociation(Base):
     __tablename__ = PERMISSION_TABLE + '_assoc'
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey(User.id))
+    user_id = Column(Integer, ForeignKey(BaseUser.id))
     group_id = Column(Integer, ForeignKey(Group.id))
     perm_id = Column(Integer, ForeignKey(Permission.id), nullable=False)
 
-    user = relationship(User, backref=backref('permission_assocs',
+    auth = relationship(BaseUser, backref=backref('permission_assocs',
         cascade='all, delete-orphan'))
     group = relationship(Group, backref=backref('permission_assocs',
         cascade='all, delete-orphan'))
@@ -392,7 +480,50 @@ class PermissionAssociation(Base):
 
     codename = association_proxy('permission', 'codename')
 
+if not hasattr(PermissionAssociation, Organization.get_column_key()):
+    col = Column(Integer, ForeignKey(Organization.id), index=True)
+    setattr(PermissionAssociation, Organization.get_column_key(), col)
 
+if not hasattr(PermissionAssociation, Organization.get_relation_key()):
+    rel = RelationshipProperty(Organization,
+        backref=PermissionAssociation._meta.model_name_plural,
+        foreign_keys=[
+            getattr(PermissionAssociation, Organization.get_column_key()),
+            ])
+    setattr(PermissionAssociation, Organization.get_relation_key(), rel)
+
+if not hasattr(PermissionAssociation, 'user'):
+    rel = RelationshipProperty(User, backref='permission_assocs',
+        foreign_keys=[
+            getattr(PermissionAssociation, Organization.get_column_key()),
+            getattr(PermissionAssociation, 'user_id'),
+            ],
+        primaryjoin="and_("
+            "PermissionAssociation.client_id==User.client_id,"
+            "PermissionAssociation.user_id==User.user_id)",
+        )
+    setattr(PermissionAssociation, 'user', rel)
+
+table_args = getattr(PermissionAssociation, '__table_args__', tuple())
+
+fk = ForeignKeyConstraint(
+    [getattr(PermissionAssociation, Organization.get_column_key()),
+        PermissionAssociation.user_id],
+    [getattr(User, Organization.get_column_key()), User.user_id],
+    )
+
+uq = UniqueConstraint(
+    getattr(PermissionAssociation, Organization.get_column_key()),
+    PermissionAssociation.user_id,
+    PermissionAssociation.group_id,
+    PermissionAssociation.perm_id)
+
+PermissionAssociation.__table_args__ = (fk,uq) + table_args
+
+
+
+#print dir(Organization)
+#assert False
 # OAuth models
 
 MAX_KEY_LEN = 255

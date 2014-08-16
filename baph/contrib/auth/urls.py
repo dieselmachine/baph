@@ -1,6 +1,7 @@
-from coffin.conf.urls.defaults import patterns
+from coffin.conf.urls import patterns, include, url
 
-urlpatterns = patterns('baph.auth.views',
+
+urlpatterns = patterns('baph.contrib.auth.views',
     (r'^login/$', 'login', {'SSL': True}),
     (r'^logout/$', 'logout'),
     (r'^password_reset/$', 'password_reset'),

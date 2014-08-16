@@ -8,18 +8,18 @@ from django.core.management.base import CommandError
 from django.db import DEFAULT_DB_ALIAS, router
 from django.utils.encoding import DEFAULT_LOCALE_ENCODING
 #from django.utils import six
-#from django.utils.six.moves import input
+from django.utils.six.moves import input
 try:
     from django.utils.text import slugify
 except:
     from django.template.defaultfilters import slugify
+from django.contrib.auth.management import get_system_username
 from sqlalchemy.ext.declarative import has_inherited_table
 
-from baph.auth import models as auth_app #, get_user_model
+from baph.contrib.auth import models as auth_app
 from baph.db.models import get_models
 from baph.db.orm import Base, ORM
-#from baph.db import Session
-#from baph.db.models import signals, get_models
+from baph.db.models import signals
 
 
 orm = ORM.get()
@@ -34,35 +34,35 @@ def _get_all_permissions(opts):
     Returns (action, scope, codename, name) for all permissions in the given opts.
     """
     perms = []
-    resources = opts.permission_resources
-    handler = opts.permission_handler
-    if handler or not resources:
+    if opts.permission_handler:
         return perms
-    fks = opts.model.get_fks()
-    for resource in resources:
-        for action in resources[resource]:
-            for limiter, key, value, rel_key, base_class in fks:
-                if (action,limiter) == ('add', 'single'):
-                    # this permission makes no sense, skip it
-                    continue
-                if key and key.find('.') > -1:
-                    frags = key.split('.')[:-2]
-                    if frags:
-                        limiter += ' ' + ' '.join(reversed(frags))
-                    frags.append(rel_key)
-                    key = '.'.join(frags)
-                perm_name = 'Can %s %s %s' % (action, limiter, resource)
-                codename = perm_name.lower().replace(' ','_')[4:]
-                perms.append(auth_app.Permission(
-                    name=perm_name,
-                    codename=codename,
-                    resource=resource,
-                    action=action,
-                    key=key,
-                    value=value,
-                    #base_class=base_class
-                    ))
+    if not opts.detail_actions and not opts.list_actions:
+        return perms
 
+    resource = opts.model.__name__
+    fks = opts.model.get_fks()
+
+    for action in opts.detail_actions + opts.list_actions:
+        for limiter, key, value, rel_key, base_class in fks:
+            if action in opts.list_actions and limiter == 'single':
+                continue
+            if key and key.find('.') > -1:
+                frags = key.split('.')[:-2]
+                if frags:
+                    limiter += ' ' + ' '.join(reversed(frags))
+                frags.append(rel_key)
+                key = '.'.join(frags)
+            perm_name = 'Can %s %s %s' % (action, limiter, resource)
+            codename = perm_name.lower().replace(' ','_')[4:]
+            perms.append(auth_app.Permission(
+                name=perm_name,
+                codename=codename,
+                resource=resource,
+                action=action,
+                key=key,
+                value=value,
+                ))
+            
     return perms
         
 def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
@@ -82,6 +82,7 @@ def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
     searched_perms = list()
     searched_codenames = set()
     for k, klass in sorted(app_models, key=lambda x: x[0]):
+        print '\n', k
         if klass.__mapper__.polymorphic_on is not None:
             if has_inherited_table(klass):
                 # ignore polymorphic subclasses
@@ -91,6 +92,7 @@ def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
             continue
 
         for perm in _get_all_permissions(klass._meta):
+            print '\t', perm
             if perm.codename in searched_codenames:
                 continue
             searched_perms.append(perm)
@@ -110,9 +112,9 @@ def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
     if verbosity >= 2:
         for perm in perms:
             print("Adding permission '%s:%s'" % (perm.resource, perm.codename))
-'''
+
 def create_superuser(app, created_models, verbosity, db, **kwargs):
-    from baph.auth.models import User as UserModel
+    from baph.contrib.auth.models import User as UserModel
     from django.core.management import call_command
     
     if UserModel in created_models and kwargs.get('interactive', True):
@@ -127,7 +129,7 @@ def create_superuser(app, created_models, verbosity, db, **kwargs):
             if confirm == 'yes':
                 call_command("createsuperuser", interactive=True, database=db)
             break
-
+'''
 def get_system_username():
     """
     Try to determine the current system user's username.
@@ -148,7 +150,7 @@ def get_system_username():
         # UnicodeDecodeError - preventive treatment for non-latin Windows.
         return ''
     return result
-
+'''
 def get_default_username(check_db=True):
     """
     Try to determine the current system user's username to use as a default.
@@ -181,8 +183,8 @@ def get_default_username(check_db=True):
 
     return default_username
 
-#signals.post_syncdb.connect(create_permissions,
-#    dispatch_uid="django.contrib.auth.management.create_permissions")
-#signals.post_syncdb.connect(create_superuser,
-#    sender=auth_app, dispatch_uid="django.contrib.auth.management.create_superuser")
-'''
+signals.post_syncdb.connect(create_permissions,
+    dispatch_uid="django.contrib.auth.management.create_permissions")
+signals.post_syncdb.connect(create_superuser,
+    sender=auth_app, dispatch_uid="django.contrib.auth.management.create_superuser")
+

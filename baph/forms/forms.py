@@ -10,9 +10,10 @@ from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 from sqlalchemy.orm.util import has_identity, identity_key
 from sqlalchemy.sql.expression import _BinaryExpression, _Label
 
-from baph.auth.models import Organization
+from baph.contrib.auth.models import Organization
 from baph.db import types, ORM
 from baph.forms import fields
+from baph.forms.widgets import ObjectSelect, MultiObjectSelect
 
 
 FIELD_MAP = {
@@ -64,11 +65,13 @@ def save_instance(form, instance, fields=None, fail_message='saved',
 
 def model_to_dict(instance, fields=None, exclude=None):
     opts = instance._meta
-    data = instance_dict(instance)
+    data = instance_dict(instance).copy()
     for f in opts.fields:
         if issubclass(f.data_type, orm.Base):
             # skip relations
-            continue
+            #assert False
+            #continue
+            pass
 
         if not f.editable:
             continue
@@ -77,9 +80,11 @@ def model_to_dict(instance, fields=None, exclude=None):
         if exclude and f.name in exclude:
             continue
         try:
-            data[f.name] = getattr(instance, f.name)
+            data[f.name] = f.value_from_object(instance)
         except:
+            raise
             pass
+
     return data
 
 def fields_for_model(model, fields=None, exclude=None, widgets=None, 
@@ -90,17 +95,26 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
     field_list = []
     ignored = []
     opts = model._meta
+
+    print 'fields for model:', model
     for f in sorted(opts.fields):
+        if f.name == 'groups':
+            print '\nGROUPS', f
         if not f.editable:
+            print 'skipping non-editable field "%s"' % f.name
             continue
         if fields is not None and not f.name in fields:
+            print 'skipping non-included field "%s"' % f.name
             continue
         if exclude and f.name in exclude:
+            print 'skipping excluded field "%s"' % f.name
             continue
+        """
         if issubclass(f.data_type, Base):
             # TODO: Auto-generate fields, control via 'fields' param
-            continue
-
+            #continue
+            pass
+        """
         kwargs = {}
         if widgets and f.name in widgets:
             kwargs['widget'] = widgets[f.name]
@@ -120,11 +134,20 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
             kwargs['form_class'] = FIELD_MAP['object']
         else:
             kwargs['form_class'] = FIELD_MAP.get(f.data_type)
+
         if issubclass(f.data_type, Base):
             kwargs['related_class'] = f.data_type
+            if f.collection_class == [list]:
+                if not kwargs.get('widget', True):
+                    kwargs['widget'] = MultiObjectSelect(model=f.data_type)
+            elif not f.collection_class:
+                kwargs['widget'] = ObjectSelect(model=f.data_type)
 
         if f.nullable or f.blank:
             kwargs['required'] = False
+
+        #if issubclass(f.data_type, Base):
+        #    assert False
 
         if formfield_callback is None:
             formfield = f.formfield(**kwargs)
@@ -134,6 +157,7 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
             formfield = formfield_callback(f, **kwargs)
 
         if formfield:
+            print 'adding field "%s"' % f.name
             field_list.append((f.name, formfield))
         else:
             ignored.append(f.name)
@@ -207,6 +231,7 @@ class BaseSQLAModelForm(forms.forms.BaseForm):
         else:
             self.instance = instance
             object_data = model_to_dict(instance, opts.fields, exclude)
+            assert False
             if has_identity(instance):
                 exclude.extend(opts.exclude_on_update)
             else:

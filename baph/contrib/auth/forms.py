@@ -9,7 +9,7 @@ from django.utils.datastructures import SortedDict
 from django.utils.http import int_to_base36
 from django.utils.translation import ugettext_lazy as _
 
-from baph.auth.models import User, Organization #UNUSABLE_PASSWORD
+from baph.contrib.auth.models import User, Organization #UNUSABLE_PASSWORD
 from baph.db.orm import ORM
 
 
@@ -46,12 +46,13 @@ That e-mail address doesn't allow the password to be set.'''))
             if not user.has_usable_password():
                 continue
             if not domain_override:
-                org = Organization.get_current()
+                org = Organization.get_current(request=request)
                 site_name = org.name
                 domain = org.host
+                print org, org.name, org.host
             else:
                 site_name = domain = domain_override
-            site_name =None
+
             c = {
                 'email': user.email,
                 'domain': domain,
@@ -64,6 +65,7 @@ That e-mail address doesn't allow the password to be set.'''))
             subject = render_to_string(subject_template_name, c)
             subject = ''.join(subject.splitlines())
             email = render_to_string(email_template_name, c)
+            print email
             send_mail(subject, email, from_email, [user.email])
 
 

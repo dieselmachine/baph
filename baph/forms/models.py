@@ -2,7 +2,9 @@ import warnings
 
 from baph.db import types
 from baph.forms import fields
+from baph.forms.forms import fields_for_model, model_to_dict
 from django import forms
+from django.core.exceptions import FieldError
 from django.forms.forms import BaseForm, get_declared_fields
 from django.forms.util import ErrorList
 from django.forms.widgets import media_property
@@ -29,7 +31,7 @@ FIELD_MAP = {
     types.List:     fields.ListField,
     types.Dict:     fields.DictField,
     }
-
+'''
 def model_to_dict(instance, fields=None, exclude=None):
     """
     Returns a dict containing the data in ``instance`` suitable for passing as
@@ -55,7 +57,8 @@ def model_to_dict(instance, fields=None, exclude=None):
             continue
         data[k] = getattr(instance, k)
     return data
-    
+'''
+'''
 def fields_for_model(model, fields=None, exclude=None, widgets=None, 
                      formfield_callback=None, labels=None, help_texts=None,
                      error_messages=None):
@@ -136,7 +139,7 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
                 if ((not exclude) or (exclude and f not in exclude)) and (f not in ignored)]
         )
     return field_dict
-
+'''
 class ModelFormOptions(object):
     def __init__(self, options=None):
         self.model = getattr(options, 'model', None)
@@ -188,7 +191,7 @@ class ModelFormMetaclass(type):
                                       opts.widgets, formfield_callback,
                                       opts.labels, opts.help_texts, 
                                       opts.error_messages)
-
+            #assert False
             # make sure opts.fields doesn't specify an invalid field
             none_model_fields = [k for k, v in fields.items() if not v]
             missing_fields = set(none_model_fields) - \
@@ -222,6 +225,7 @@ class BaseModelForm(BaseForm):
             object_data = model_to_dict(instance, opts.fields, opts.exclude)
         if initial is not None:
             object_data.update(initial)
+        #assert False
         self._validate_unique = False
         self.nested = nested
         super(BaseModelForm, self).__init__(data, files, auto_id, prefix,

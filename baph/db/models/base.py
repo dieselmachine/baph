@@ -5,6 +5,7 @@ import sys
 
 from django.conf import settings
 from django.forms import ValidationError
+from django.shortcuts import resolve_url
 from sqlalchemy import event, inspect
 from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
 from sqlalchemy.ext.compiler import compiles
@@ -15,7 +16,7 @@ from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
 from sqlalchemy.orm import mapper, configure_mappers, object_session
 from sqlalchemy.orm.attributes import instance_dict, instance_state
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
-from sqlalchemy.orm.util import has_identity
+from sqlalchemy.orm.util import has_identity, identity_key
 from sqlalchemy.schema import ForeignKeyConstraint
 
 from baph.db import ORM
@@ -28,6 +29,7 @@ from baph.utils.importing import safe_import, remove_class
 
 @compiles(ForeignKeyConstraint)
 def set_default_schema(constraint, compiler, **kw):
+    print constraint, (compiler,), kw
     """ This overrides the formatting function used to render remote tables
         in foreign key declarations, because innodb (at least, perhaps others)
         requires explicit schemas when declaring a FK which crosses schemas """
@@ -35,6 +37,7 @@ def set_default_schema(constraint, compiler, **kw):
    
     if remote_table.schema is None:
         default_schema = remote_table.bind.url.database
+        print (constraint.columns[0],)
         constraint_schema = constraint.columns[0].table.schema
         if constraint_schema not in (default_schema, None):
             """ if the constraint schema is not the default, we need to 
@@ -45,7 +48,7 @@ def set_default_schema(constraint, compiler, **kw):
             return value
     return compiler.visit_foreign_key_constraint(constraint, **kw)
 
-def constructor(self, **kwargs):
+def constructor(self, ignore_unknown_kwargs=False, **kwargs):
     cls = type(self)
 
     # auto-populate default values on init
@@ -71,7 +74,7 @@ def constructor(self, **kwargs):
 
     # now load in the kwargs values
     for k in kwargs:
-        if not hasattr(cls, k):
+        if not hasattr(cls, k) and not ignore_unknown_kwargs:
             raise TypeError('%r is an invalid keyword argument for %s' %
                 (k, cls.__name__))
         setattr(self, k, kwargs[k])
@@ -84,6 +87,47 @@ def set_polymorphic_base_mapper(mapper_, class_):
         mapper_.polymorphic_map = polymorphic_map
 
 class Model(CacheMixin, ModelPermissionMixin):
+
+    @classmethod
+    def list_actions(cls, user, ns):
+        for action in cls._meta.list_actions:
+            label = action.capitalize()
+            view = '%s:%s' % (ns, action)
+            if action.find('.') > -1:
+                obj_name, action = action.split('.', 1)
+            else:
+                obj_name = cls._meta.object_name
+            if user.has_perm(obj_name, action):
+                yield (label, view)
+
+    def actions(self, user, ns):
+        cls, args = identity_key(instance=self)
+        for action in self._meta.detail_actions:
+            label = action.capitalize()
+            view = '%s:%s' % (ns, action)
+            if action.find('.') > -1:
+                obj_name, action = action.split('.', 1)
+            else:
+                obj_name = self._meta.object_name
+            if user.has_obj_perm(obj_name, action, self):
+                yield (label, view, args)
+
+    '''
+    def actions(self, user, ns=None):
+        cls, args = identity_key(instance=self)
+        #action_pk = getattr(self._meta, 'action_pk', 'id')
+        for label, action, view in getattr(self._meta, 'actions', []):
+            if ns:
+                view = '%s:%s' % (ns, view)
+            if action.find('.') > -1:
+                obj_name, action = action.split('.', 1)
+            else:
+                obj_name = self._meta.object_name
+            if user.has_obj_perm(obj_name, action, self):
+                if hasattr(self._meta, 'action_pk'):
+                    args = [getattr(self, self._meta.action_pk)]
+                yield (label, resolve_url(view, *args))
+    '''
 
     @classmethod
     def create(cls, *args, **kwargs):
@@ -192,6 +236,7 @@ class ModelBase(type):
             kwargs = {}
 
         new_class.add_to_class('_meta', Options(meta, **kwargs))
+        print 'new class:', new_class
         if base_meta:
             for k,v in vars(base_meta).items():
                 if not getattr(new_class._meta, k, None):
@@ -227,7 +272,9 @@ class ModelBase(type):
             return model
 
         # Add all attributes to the class.
+        print '\nadding class attrs to ', new_class
         for obj_name, obj in attrs.items():
+            #print '\t', obj_name
             new_class.add_to_class(obj_name, obj)
         
         if attrs.get('__abstract__', None):

@@ -11,17 +11,17 @@ from django.http import HttpResponseRedirect, HttpResponseForbidden
 from django.utils.translation import ugettext as _
 from sqlalchemy.orm.exc import NoResultFound
 
-from baph.auth import login, logout
-from baph.auth.forms import PasswordChangeForm
-from baph.auth.models import User, Organization
-from baph.auth.registration import settings
-from baph.auth.registration.decorators import secure_required
-from baph.auth.registration.forms import (SignupForm, AuthenticationForm,
+from baph.contrib.auth import login, logout
+from baph.contrib.auth.forms import PasswordChangeForm
+from baph.contrib.auth.models import User, Organization
+from baph.contrib.auth.registration import settings
+from baph.contrib.auth.registration.decorators import secure_required
+from baph.contrib.auth.registration.forms import (SignupForm, AuthenticationForm,
     ChangeEmailForm, SignupFormOnlyEmail)
-from baph.auth.registration.managers import SignupManager
-from baph.auth.registration.models import UserRegistration
-from baph.auth.registration.utils import signin_redirect
-from baph.auth.views import logout as Signout
+from baph.contrib.auth.registration.managers import SignupManager
+from baph.contrib.auth.registration.models import UserRegistration
+from baph.contrib.auth.registration.utils import signin_redirect
+from baph.contrib.auth.views import logout as Signout
 from baph.db.orm import ORM
 
 
@@ -209,7 +209,7 @@ def signin(request, auth_form=AuthenticationForm,
 
                 # Whereto now?
                 redirect_to = redirect_signin_function(
-                    request.REQUEST.get(redirect_field_name), user)
+                    request.REQUEST.get(redirect_field_name), request)
                 return HttpResponseRedirect(redirect_to)
             else:
                 return redirect(reverse('baph_disabled'))
@@ -236,7 +236,7 @@ def signout(request, next_page=settings.BAPH_REDIRECT_ON_SIGNOUT,
 
     :param template_name:
         String defining the name of the template to use. Defaults to
-        ``userena/signout.html``.
+        ``registration/signout.html``.
 
     """
     if request.user.is_authenticated() and settings.BAPH_USE_MESSAGES: # pragma: no cover

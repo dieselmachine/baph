@@ -1,4 +1,4 @@
-from baph.auth.registration import settings
+from baph.contrib.auth.registration import settings
 
 
 def signin_redirect(redirect=None, user=None):
@@ -21,11 +21,18 @@ def signin_redirect(redirect=None, user=None):
     :return: String containing the URI to redirect to.
 
     """
-    if redirect: return redirect
+    print 'signin redirect'
+    if redirect: 
+        print 'redirect=', redirect
+        return redirect
     elif user is not None:
+        print 'user:', settings.BAPH_SIGNIN_REDIRECT_URL % \
+                {'username': user.username}
         return settings.BAPH_SIGNIN_REDIRECT_URL % \
                 {'username': user.username}
-    else: return settings.LOGIN_REDIRECT_URL
+    else: 
+        print 'default:', settings.LOGIN_REDIRECT_URL
+        return settings.LOGIN_REDIRECT_URL
 
 def get_protocol():
     """

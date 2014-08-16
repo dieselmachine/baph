@@ -191,7 +191,8 @@ def safe_import(path, replace_modules=[]):
         try:
             exec code in sys.modules[mod].__dict__
             break
-        except:
+        except Exception as e:
+            print e
             exc_type, exc_value, tb_root = sys.exc_info()
 
             tb = tb_root

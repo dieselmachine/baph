@@ -26,16 +26,16 @@ from baph.utils.importing import import_any_module, import_attr
 
 
 COUNTRY_DIVISIONS = {
-    'province': ['ar', 'be', 'ca', 'es', 'nl', 'za'],
+    'province': ['ar', 'be', 'ca', 'cn', 'ec', 'es', 'nl', 'tr', 'za'],
     'state': ['at', 'au', 'br', 'ch', 'de', 'in_', 'mx', 'us'],
-    'department': ['co'],
+    'department': ['co', 'uy'],
     }
 COUNTRY_STATES = COUNTRY_DIVISIONS['state']
 COUNTRY_PROVINCES = COUNTRY_DIVISIONS['province']
 
 
 def _get_country_divisions(country, div_type, key_by_code=False):
-    c2 = country if not country.endswith('_') else country.rstrip('_')
+    c2 = country.rstrip('_')
     mod_name = 'localflavor.%s.%s_%ss' % (country, c2, div_type)
     module = import_module(mod_name)
     choices = getattr(module, '%s_CHOICES' % div_type.upper(), [])
