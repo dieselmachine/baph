@@ -31,7 +31,7 @@ from baph.utils.importing import safe_import, remove_class
 
 @compiles(ForeignKeyConstraint)
 def set_default_schema(constraint, compiler, **kw):
-    print constraint, (compiler,), kw
+    #print constraint, (compiler,), kw
     """ This overrides the formatting function used to render remote tables
         in foreign key declarations, because innodb (at least, perhaps others)
         requires explicit schemas when declaring a FK which crosses schemas """
@@ -39,7 +39,7 @@ def set_default_schema(constraint, compiler, **kw):
    
     if remote_table.schema is None:
         default_schema = remote_table.bind.url.database
-        print (constraint.columns[0],)
+        #print (constraint.columns[0],)
         constraint_schema = constraint.columns[0].table.schema
         if constraint_schema not in (default_schema, None):
             """ if the constraint schema is not the default, we need to 
@@ -264,7 +264,6 @@ class ModelBase(type):
             kwargs = {}
 
         new_class.add_to_class('_meta', Options(meta, **kwargs))
-        print 'new class:', new_class
         if base_meta:
             # Non-abstract child classes inherit some attributes from their
             # non-abstract parent (unless an ABC comes before it in the
@@ -303,7 +302,6 @@ class ModelBase(type):
             return model
 
         # Add all attributes to the class.
-        print '\nadding class attrs to ', new_class
         for obj_name, obj in attrs.items():
             #print '\t', obj_name
             new_class.add_to_class(obj_name, obj)
