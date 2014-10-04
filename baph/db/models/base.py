@@ -14,18 +14,21 @@ from sqlalchemy.ext.declarative import declarative_base, DeclarativeMeta
 from sqlalchemy.ext.declarative.base import (_as_declarative, _add_attribute)
 from sqlalchemy.ext.declarative.clsregistry import add_class
 from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
-from sqlalchemy.orm import mapper, configure_mappers, object_session
+from sqlalchemy.orm import mapper, object_session, class_mapper
 from sqlalchemy.orm.attributes import instance_dict, instance_state
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
+from sqlalchemy.orm.session import Session
 from sqlalchemy.orm.util import has_identity, identity_key
 from sqlalchemy.schema import ForeignKeyConstraint
 
 from baph.apps import apps
 from baph.apps.config import MODELS_MODULE_NAME
 from baph.db import ORM
-from baph.db.models.mixins import CacheMixin, ModelPermissionMixin
-from baph.db.models.options import Options
 from baph.db.models import signals
+from baph.db.models.loading import get_model, register_models
+from baph.db.models.mixins import CacheMixin, ModelPermissionMixin, GlobalMixin
+from baph.db.models.options import Options
+from baph.db.models.utils import class_resolver, key_to_value
 from baph.utils.importing import safe_import, remove_class
 
 
@@ -88,7 +91,7 @@ def set_polymorphic_base_mapper(mapper_, class_):
         polymorphic_map.update(mapper_.polymorphic_map)
         mapper_.polymorphic_map = polymorphic_map
 
-class Model(CacheMixin, ModelPermissionMixin):
+class Model(CacheMixin, ModelPermissionMixin, GlobalMixin):
 
     def __init__(self, *args, **kwargs):
         signals.pre_init.send(sender=self.__class__, args=args, kwargs=kwargs)
@@ -174,6 +177,8 @@ class Model(CacheMixin, ModelPermissionMixin):
             if not self in session:
                 session.add(self)
             session.commit()
+
+        
 
 class ModelBase(type):
 
@@ -354,8 +359,6 @@ class ModelBase(type):
 
     @property
     def all_properties(cls):
-        if not cls.__mapper__.configured:
-            configure_mappers()
         for key, attr in inspect(cls).all_orm_descriptors.items():
             if attr.is_mapper:
                 continue
@@ -391,6 +394,7 @@ class ModelBase(type):
             pass
         return cls
 
+
 def get_declarative_base(**kwargs):
     return declarative_base(cls=Model, 
         metaclass=ModelBase,
@@ -403,3 +407,20 @@ if getattr(settings, 'CACHE_ENABLED', False):
     @event.listens_for(mapper, 'after_delete')
     def kill_cache(mapper, connection, target):
         target.kill_cache()
+
+@event.listens_for(Session, 'before_flush')
+def check_global_status(session, flush_context, instances):
+    """
+    If global_parents is defined, we check the parents to see if any of them
+    are global. If a global parent is found, we set the child to global as well
+    """
+    for target in session:
+        if target._meta.global_parents:
+            if target.is_globalized():
+                continue
+            for parent_rel in target._meta.global_parents:
+                parent = key_to_value(target, parent_rel, raw=True)
+                if parent and parent.is_globalized():
+                    target.globalize(commit=False)
+                    break
+
