@@ -16,3 +16,5 @@ def emit_post_migrate_signal(created_models, verbosity, interactive, db):
             verbosity=verbosity,
             interactive=interactive,
             using=db)
+
+emit_post_sync_signal = emit_post_migrate_signal
