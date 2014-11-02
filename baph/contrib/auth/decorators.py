@@ -130,7 +130,6 @@ def permission_required(perm, login_url=None, raise_exception=False):
     def check_perm_closure(view_func, view_base, request, *args, **kwargs):
         keys = view_func.func_code.co_varnames[2:] #item 0 is 'request'
         kwargs.update(dict(zip(keys,args)))
-        cid = request.user.client_id
         #assert False
         cls = view_base._meta.model
         if not request.user.has_perm(cls._meta.object_name, perm, filters=kwargs):

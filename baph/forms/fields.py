@@ -32,6 +32,16 @@ class NullBooleanChoiceField(forms.ChoiceField):
             return False
         return None
 
+class NullChoiceField(forms.ChoiceField):
+    """
+    Choice field with option for None
+    """
+    def to_python(self, value):
+        v2 = super(NullChoiceField, self).to_python(value)
+        if v2 == '':
+            return None
+        return v2
+
 class NullCharField(forms.CharField):
     """
     CharField that does not cast None to ''

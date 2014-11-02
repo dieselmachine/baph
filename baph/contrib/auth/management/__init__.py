@@ -121,7 +121,7 @@ def create_superuser(app, created_models, verbosity, db, **kwargs):
         msg = ("\nYou just installed Baph's auth system, which means you "
             "don't have any superusers defined.\nWould you like to create one "
             "now? (yes/no): ")
-        confirm = input(msg)
+        confirm = raw_input(msg)
         while 1:
             if confirm not in ('yes', 'no'):
                 confirm = input('Please enter either "yes" or "no": ')
@@ -183,8 +183,8 @@ def get_default_username(check_db=True):
 
     return default_username
 
-signals.post_syncdb.connect(create_permissions,
-    dispatch_uid="django.contrib.auth.management.create_permissions")
+#signals.post_syncdb.connect(create_permissions,
+#    dispatch_uid="django.contrib.auth.management.create_permissions")
 signals.post_syncdb.connect(create_superuser,
-    sender=auth_app, dispatch_uid="django.contrib.auth.management.create_superuser")
+    sender=auth_app, dispatch_uid="baph.contrib.auth.management.create_superuser")
 

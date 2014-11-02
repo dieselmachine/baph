@@ -59,11 +59,8 @@ class MultiSQLAlchemyBackend2(object):
             # if it looks like an email, lookup against the email column
             django.core.validators.validate_email(identification)
             filters = {'email': identification}
-            if hasattr(User, 'email'):
-                user = session.query(User).filter_by(**filters).first()
-            else:
-                user = session.query(BaseUser).filter_by(**filters).first()
-            
+            auth_cls = getattr(User, 'AUTH_CLASS', User)
+            user = session.query(auth_cls).filter_by(**filters).first()
             print 'found user:', (user,)
         except django.core.validators.ValidationError:
             # this wasn't an email
@@ -95,18 +92,18 @@ class MultiSQLAlchemyBackend2(object):
         return session.query(User).get(user_id)
 
     def get_org_user(self, user_id, org_id):
-        print 'get_org_user'
+        print 'get_org_user', user_id, org_id
         session = orm.sessionmaker()
         org_col = getattr(User, Organization.get_column_key())
         user = session.query(User) \
             .filter(org_col==org_id) \
             .filter(User.user_id==user_id) \
             .first()
-        if not user:
+        if not user and hasattr(User, 'AUTH_CLASS'):
             # check for a SU account
-            user = session.query(User) \
-                .filter(org_col==None) \
-                .filter(User.user_id==user_id) \
+            user = session.query(User.AUTH_CLASS) \
+                .filter(User.AUTH_CLASS.id==user_id) \
+                .filter(User.AUTH_CLASS.is_superuser==True) \
                 .first()
         return user
 

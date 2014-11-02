@@ -38,6 +38,10 @@ FIELD_MAP = {
     object:        fields.ObjectField,
     }
 '''
+COLLECTION_MAP = {
+    OrderingList:   types.List,
+    MappedCollection:   types.Dict,
+    }
 
 class NOT_PROVIDED:
     pass
@@ -101,6 +105,35 @@ class Field(object):
         else:
             self.creation_counter = Field.creation_counter
             Field.creation_counter += 1
+
+    def as_form_field(self):
+        from baph.db.orm import Base
+        kwargs = {}
+        
+        if issubclass(self.data_type, Base):
+            kwargs['related_class'] = self.data_type
+            field_cls = fields.ObjectField
+        if self.collection_class is not None:
+            kwargs['collection_class'] = self.collection_class
+            field_cls = fields.MultiObjectField
+        if not kwargs:
+            field_cls = FIELD_MAP[self.data_type]
+        return self.formfield(field_cls, **kwargs)
+            
+        if self.data_collection in COLLECTION_MAP:
+            type_ = COLLECTION_MAP[self.data_collection]
+        elif self.uselist:
+            type_ = types.List
+        elif issubclass(self.data_type, Base):
+            type_ = object
+        else:
+            type_ = self.data_type
+        kwargs = {
+            'required': self.required,
+            'initial': self.default,
+            }
+        field = FIELD_MAP[type_](**kwargs)
+        return field
 
     @property
     def unique(self):

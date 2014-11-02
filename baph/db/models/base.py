@@ -25,7 +25,6 @@ from baph.apps import apps
 from baph.apps.config import MODELS_MODULE_NAME
 from baph.db import ORM
 from baph.db.models import signals
-from baph.db.models.loading import get_model, register_models
 from baph.db.models.mixins import CacheMixin, ModelPermissionMixin, GlobalMixin
 from baph.db.models.options import Options
 from baph.db.models.utils import class_resolver, key_to_value
@@ -200,7 +199,7 @@ class ModelBase(type):
 
 
     def __new__(cls, name, bases, attrs):
-        #print '%s.__new__(%s)' % (name, cls)
+        print '%s.__new__(%s)' % (name, cls)
 
         req_sub = attrs.pop('__requires_subclass__', False)
 

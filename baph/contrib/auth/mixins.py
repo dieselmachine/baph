@@ -6,7 +6,6 @@ from sqlalchemy.orm import lazyload
 
 from baph.apps import apps
 from baph.db import ORM
-from baph.db.models.loading import cache
 from baph.db.models.utils import class_resolver, column_to_attr, key_to_value
 
 

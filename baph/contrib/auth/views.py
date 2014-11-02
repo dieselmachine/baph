@@ -99,9 +99,9 @@ def logout(request, next_page=None,
     '''Logs out the user and displays 'You are logged out' message.'''
     host = request.META['HTTP_HOST']
     redirect_host = None
-    if host == settings.BAPH_SECURE_HOST:
+    if host == getattr(settings, 'BAPH_SECURE_HOST', None):
         # secure logout, we should redirect back to the originating host
-        redirect_host = request.session.pop('cs_host')
+        redirect_host = settings.BAPH_DEFAULT_HOST
     
     auth_logout(request)
 

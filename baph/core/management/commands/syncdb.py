@@ -8,6 +8,7 @@ from django.core.management.color import no_style
 from django.utils.datastructures import SortedDict
 from django.utils.importlib import import_module
 from sqlalchemy import MetaData, create_engine
+from sqlalchemy.engine import reflection
 from sqlalchemy.schema import CreateSchema, DropSchema, CreateTable
 
 from baph.apps import apps
@@ -89,8 +90,12 @@ class Command(NoArgsCommand):
         engine.url.database = default_schema
 
         tmp_engine = create_engine(tmp_url)
-        tmp_conn = tmp_engine.connect()
-        existing_schemas = set([s[0] for s in tmp_conn.execute('show databases')])
+        insp = reflection.Inspector.from_engine(tmp_engine)
+        existing_schemas = set(insp.get_schema_names())
+        
+        #tmp_conn = tmp_engine.connect()
+        
+        #existing_schemas = set([s[0] for s in tmp_conn.execute('show databases')])
         if not default_schema in existing_schemas:
             tmp_engine.execute(CreateSchema(default_schema))
             existing_schemas.add(default_schema)
@@ -136,6 +141,7 @@ class Command(NoArgsCommand):
             if verbosity >= 3:
                 self.stdout.write("\t%s\n" % tablename)
 
+        print '\n'
         all_models = []
         if verbosity >= 1:
             self.stdout.write("Getting required models...\n")
@@ -144,7 +150,7 @@ class Command(NoArgsCommand):
                 continue
             for model in apps.get_models(app_config.models_module,
                                          include_auto_created=True):
-                app_name = app.__name__.rsplit('.',1)[0]
+                app_name = app_config.name.rsplit('.',1)[0]
                 all_models.append( (app_name, model) )
                 if verbosity >= 3:
                     self.stdout.write("\t%s.%s\n" % (app_name,model))
@@ -154,7 +160,9 @@ class Command(NoArgsCommand):
         if verbosity >= 1:
             self.stdout.write('Building manifest...\n')
         for app_name, model in all_models:
+            print app_name, model
             tablename = get_tablename(model)
+            print '\t', tablename
             if tablename in existing_tables:
                 continue
             table_manifest.add( (app_name, model) )
@@ -199,6 +207,8 @@ class Command(NoArgsCommand):
                 existing_tables.append(tablename)
             existing_models.append(model)
             created_models.add(model)
+        for c in to_create:
+            print c
         orm.Base.metadata.create_all(bind=engine, tables=to_create)
 
         # Load initial_data fixtures (unless that has been disabled)

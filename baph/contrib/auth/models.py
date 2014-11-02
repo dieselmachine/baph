@@ -314,12 +314,14 @@ class AbstractBaseUser(Base, UserPermissionMixin):
         return user
 
     @classmethod
-    def create_user(cls, username, email=None, password=None, **extra_fields):
+    def create_user(cls, username=None, email=None, password=None,
+                    **extra_fields):
         return cls._create_user(username, email, password, False, False,
                                  **extra_fields)
 
     @classmethod
-    def create_superuser(cls, username, email, password, **extra_fields):
+    def create_superuser(cls, username=None, email=None, password=None,
+                         **extra_fields):
         return cls._create_user(username, email, password, True, True,
                                  **extra_fields)
 

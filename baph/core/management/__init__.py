@@ -18,6 +18,8 @@ from django.utils import six
 # For backwards compatibility: get_version() used to be in this module.
 from django import get_version
 
+print '__init__.py'
+
 
 def find_commands(management_dir):
     """

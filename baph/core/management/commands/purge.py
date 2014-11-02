@@ -87,12 +87,13 @@ and DELETE ALL TABLES AND SCHEMAS. Are you sure you want to do this?
             db = options.get('database')
             orm = ORM.get(db)
             engine = orm.engine
+            inspector = reflection.Inspector.from_engine(engine)
+
             conn = engine.connect()
             Base = orm.Base
 
             default_schema = engine.url.database
-            existing_schemas = set([s[0] for s in conn.execute('show databases') 
-                               if s[0]])
+            existing_schemas = set(inspector.get_schema_names())
             schemas = set([default_schema])
             schemas.update(Base.metadata._schemas)
             schemas = schemas.intersection(existing_schemas)
