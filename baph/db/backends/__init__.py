@@ -45,10 +45,12 @@ def django_config_to_sqla_config(config):
     return params
 
 def load_engine(config):
+    engine_opts = config.pop('ENGINE_OPTIONS', {})
     url = URL(**django_config_to_sqla_config(config))
     try:
         engine = create_engine(url, poolclass=NullPool,
-                               echo=getattr(settings, 'BAPH_DB_ECHO', False))
+                               echo=getattr(settings, 'BAPH_DB_ECHO', False),
+                               **engine_opts)
         return engine
     except ArgumentError:
         error_msg = "%r isn't a valid dialect/driver" % url
