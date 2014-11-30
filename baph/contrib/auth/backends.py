@@ -52,6 +52,7 @@ class MultiSQLAlchemyBackend2(object):
     """Backend which auths via username or email"""
     
     def authenticate(self, identification, password=None, check_password=True):
+        print 'auth called'
         session = orm.sessionmaker()
         org_key = Organization.resource_name.lower() + '_id'
         user = None
@@ -60,31 +61,30 @@ class MultiSQLAlchemyBackend2(object):
             django.core.validators.validate_email(identification)
             filters = {'email': identification}
             auth_cls = getattr(User, 'AUTH_CLASS', User)
-            user = session.query(auth_cls).filter_by(**filters).first()
-            print 'found user:', (user,)
+            auth = session.query(auth_cls).filter_by(**filters).first()
+            print 'found user:', (auth,)
         except django.core.validators.ValidationError:
             # this wasn't an email
             pass
 
-        if not user:
+        if not auth:
             # email lookup failed, try username lookup if enabled
             if auth_settings.BAPH_AUTH_WITHOUT_USERNAMES:
                 # usernames are not valid login credentials
                 return None
-            filters = {User.USERNAME_FIELD: identification}
+            filters = {auth_cls.USERNAME_FIELD: identification}
             if auth_settings.BAPH_AUTH_UNIQUE_WITHIN_ORG:
                 filters[org_key] = Organization.get_current_id()
-            user = session.query(User).filter_by(**filters).first()
+            auth = session.query(auth_cls).filter_by(**filters).first()
 
-        if not user:
+        if not auth:
             # username lookup failed, no user found
             return None
         if check_password:
-            if user.check_password(password):
-                print user
-                return user
+            if auth.check_password(password):
+                return auth
             return None
-        else: return user
+        else: return auth
 
     def get_user(self, user_id):
         print 'get_user'
@@ -99,11 +99,6 @@ class MultiSQLAlchemyBackend2(object):
             .filter(org_col==org_id) \
             .filter(User.user_id==user_id) \
             .first()
-        if not user and hasattr(User, 'AUTH_CLASS'):
-            # check for a SU account
-            user = session.query(User.AUTH_CLASS) \
-                .filter(User.AUTH_CLASS.id==user_id) \
-                .filter(User.AUTH_CLASS.is_superuser==True) \
-                .first()
+        print 'user:', user
         return user
 

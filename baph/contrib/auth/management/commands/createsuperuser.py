@@ -121,7 +121,6 @@ class Command(BaseCommand):
                     user_data[self.AuthModel.USERNAME_FIELD] = username
 
                 for field_name in self.AuthModel.REQUIRED_FIELDS:
-                    print 'required field:', field_name
                     field = self.AuthModel._meta.get_field(field_name)
                     user_data[field_name] = options.get(field_name)
                     while user_data[field_name] is None:
@@ -132,6 +131,22 @@ class Command(BaseCommand):
                             self.stderr.write("Error: %s" % '; '.join(e.messages))
                             user_data[field_name] = None
 
+                user_data2 = {}
+                if self.AuthModel != self.UserModel:
+                    for field_name in self.UserModel.REQUIRED_FIELDS:
+                        if field_name in user_data:
+                            user_data2[field_name] = user_data[field_name]
+                            continue
+                        field = self.UserModel._meta.get_field(field_name)
+                        user_data2[field_name] = options.get(field_name)
+                        while user_data2[field_name] is None:
+                            raw_value = input(force_str('%s: ' % capfirst(field.verbose_name)))
+                            try:
+                                user_data2[field_name] = field.clean(raw_value)
+                            except exceptions.ValidationError as e:
+                                self.stderr.write("Error: %s" % '; '.join(e.messages))
+                                user_data2[field_name] = None
+                    
                 # Get a password
                 while password is None:
                     if not password:

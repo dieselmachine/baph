@@ -34,7 +34,8 @@ DEFAULT_NAMES = ('apps', 'model_name', 'model_name_plural',
                  'list_actions', 'detail_actions',
                  'filtering', 'ordering', 'searchable',
                  'global_column', 'global_cascades', 'global_parents',
-                 'virtual_fields',
+                 'virtual_fields', 'extension_field',
+                 'labels', 'help_texts',
                  )
 
 class Options(object):
@@ -107,6 +108,8 @@ class Options(object):
         self.detail_actions = []
         self.list_actions = []
         self.virtual_fields = []
+        self.labels = {}
+        self.help_texts = {}
 
         self.limit = 1000
         self.object_name, self.app_label = None, app_label

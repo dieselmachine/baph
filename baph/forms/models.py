@@ -146,6 +146,7 @@ class ModelFormOptions(object):
         self.fields = getattr(options, 'fields', None)
         self.exclude = getattr(options, 'exclude', None)
         self.widgets = getattr(options, 'widgets', None)
+        self.localized_fields = getattr(options, 'localized_fields', None)
         self.labels = getattr(options, 'labels', None)
         self.help_texts = getattr(options, 'help_texts', None)
         self.error_messages = getattr(options, 'error_messages', None)
@@ -170,7 +171,6 @@ class ModelFormMetaclass(type):
         if 'media' not in attrs:
             new_class.media = media_property(new_class)
         opts = new_class._meta = ModelFormOptions(getattr(new_class, 'Meta', None))
-
         if opts.model:
             # If a model is defined, extract form fields from it.
             if opts.fields is None and opts.exclude is None:
@@ -189,8 +189,8 @@ class ModelFormMetaclass(type):
             '''
             fields = fields_for_model(opts.model, opts.fields, opts.exclude,
                                       opts.widgets, formfield_callback,
-                                      opts.labels, opts.help_texts, 
-                                      opts.error_messages)
+                                      opts.localized_fields, opts.labels,
+                                      opts.help_texts, opts.error_messages)
             #assert False
             # make sure opts.fields doesn't specify an invalid field
             none_model_fields = [k for k, v in fields.items() if not v]
@@ -204,6 +204,10 @@ class ModelFormMetaclass(type):
             # Override default model fields with any custom declared ones
             # (plus, include all the other declared fields).
             fields.update(declared_fields)
+            # TODO: include custom fields
+            #if hasattr(self.model._meta, 'extension_field'):
+                
+                
         else:
             fields = declared_fields
         new_class.declared_fields = declared_fields

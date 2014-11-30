@@ -96,10 +96,18 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
     ignored = []
     opts = model._meta
 
+    # pull labels from the model, then update with local values
+    form_labels = opts.labels or {}
+    if labels:
+        form_labels.update(labels)
+
+    # pull labels from the model, then update with local values
+    form_help_texts = opts.help_texts or {}
+    if help_texts:
+        form_help_texts.update(help_texts)
+
     print 'fields for model:', model
     for f in sorted(opts.fields):
-        if f.name == 'groups':
-            print '\nGROUPS', f
         if not f.editable:
             print 'skipping non-editable field "%s"' % f.name
             continue
@@ -120,10 +128,10 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
             kwargs['widget'] = widgets[f.name]
         if localized_fields == ALL_FIELDS or (localized_fields and f.name in localized_fields):
             kwargs['localize'] = True
-        if labels and f.name in labels:
-            kwargs['label'] = labels[f.name]
-        if help_texts and f.name in help_texts:
-            kwargs['help_text'] = help_texts[f.name]
+        if form_labels and f.name in form_labels:
+            kwargs['label'] = form_labels[f.name]
+        if form_help_texts and f.name in form_help_texts:
+            kwargs['help_text'] = form_help_texts[f.name]
         if error_messages and f.name in error_messages:
             kwargs['error_messages'] = error_messages[f.name]
 

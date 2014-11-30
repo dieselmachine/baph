@@ -3,7 +3,7 @@ from optparse import make_option
 import traceback
 
 from django.conf import settings
-from django.core.management import call_command
+from baph.core.management import call_command
 from django.core.management.color import no_style
 from django.utils.datastructures import SortedDict
 from django.utils.importlib import import_module

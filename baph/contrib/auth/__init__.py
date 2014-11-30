@@ -38,12 +38,12 @@ def login(request, user):
         # this is a split user model, with one auth record, and multiple user
         # records (one for each organization). Use the base user id for the 
         # identifier, and we'll grab the org-specific user via backend.get_user
-        user_id = user.user_id
+        auth_id = user.user_id
     else:
-        user_id = user.id
+        auth_id = user.id
         if hasattr(request, 'user'):
             request.user = user
-    request.session[SESSION_KEY] = user_id
+    request.session[SESSION_KEY] = auth_id
     request.session[BACKEND_SESSION_KEY] = user.backend
 
     user_logged_in.send(sender=user.__class__, request=request, user=user)    
@@ -66,9 +66,13 @@ def get_user(request):
         user_id = request.session[SESSION_KEY]
         backend_path = request.session[BACKEND_SESSION_KEY]
         backend = load_backend(backend_path)
+        #assert False
         if hasattr(request, 'org'):
             # Org middleware present- include org_id in filters
-            org_id = getattr(request.org, 'id', None)
+            if request.session.get('org_override', None):
+                org_id = request.session['org_override']
+            else:
+                org_id = getattr(request.org, 'id', None)
             user = backend.get_org_user(user_id, org_id) or AnonymousUser()
         else:
             user = backend.get_user(user_id) or AnonymousUser()

@@ -184,10 +184,15 @@ class Command(BaseCommand):
                         "No fixture data found for '%s'. "
                         "(File format may be invalid.)" % fixture_name)
 
-        session.execute('SET foreign_key_checks=0')
-        session.commit()
-        session.execute('SET foreign_key_checks=1')
-
+        if orm.engine.name == 'mysql':
+            session.execute('SET foreign_key_checks=0')
+            session.commit()
+            session.execute('SET foreign_key_checks=1')
+        elif orm.engine.name == 'postgresql':
+            session.execute('SET CONSTRAINTS ALL DEFERRED;')
+            session.commit()
+        else:
+            session.commit()
 
     def _find_fixtures(self, fixture_label):
         """
