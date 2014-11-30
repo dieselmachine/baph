@@ -110,6 +110,7 @@ class Options(object):
         self.virtual_fields = []
         self.labels = {}
         self.help_texts = {}
+        self.extension_field = None
 
         self.limit = 1000
         self.object_name, self.app_label = None, app_label
