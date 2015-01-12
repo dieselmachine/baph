@@ -42,7 +42,11 @@ def set_default_schema(constraint, compiler, **kw):
     if remote_table.schema is None:
         default_schema = remote_table.bind.url.database
         #print (constraint.columns[0],)
-        constraint_schema = constraint.columns[0].table.schema
+        print (constraint.table,)
+        if constraint.table is not None:
+            constraint_schema = constraint.table.schema
+        else:
+            constraint_schema = constraint.columns[0].table.schema
         if constraint_schema not in (default_schema, None):
             """ if the constraint schema is not the default, we need to 
                 add a schema before formatting the table """
