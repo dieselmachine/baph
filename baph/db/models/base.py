@@ -138,6 +138,15 @@ class Model(CacheMixin, ModelPermissionMixin, GlobalMixin):
         module = import_module(cls_mod)
         return getattr(module, cls_name)
 
+    @property
+    def pk_kwargs(self):
+        cls, values = identity_key(instance=self)
+        mapper = inspect(cls)
+        keys = [mapper.get_property_by_column(col).key \
+                    for col in mapper.primary_key]
+        values = mapper.primary_key_from_instance(self)
+        return dict(zip(keys, values))
+
     def update(self, data):
         for key, value in data.iteritems():
             if hasattr(self, key) and getattr(self, key) != value:
@@ -148,6 +157,11 @@ class Model(CacheMixin, ModelPermissionMixin, GlobalMixin):
             session = object_session(self)
             session.delete(self)
             session.commit()
+
+    @property
+    def js_data_string(self):
+        parts = ['data-%s="%s"' % (k,v) for k,v in self.pk_kwargs.items()]
+        return ' '.join(parts)
 
     def to_dict(self):
         '''Creates a dictionary out of the column properties of the object.
