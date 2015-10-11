@@ -15,7 +15,6 @@ from django.dispatch import receiver
 from django.test.signals import setting_changed
 from django.utils.datastructures import SortedDict
 from django.utils.encoding import smart_str
-from django.utils.importlib import import_module
 from django.utils.translation import ugettext as _
 from sqlalchemy import *
 from sqlalchemy.ext.associationproxy import association_proxy
@@ -25,15 +24,11 @@ from sqlalchemy.orm import (relationship, backref, object_session,
 
 from baph.contrib.auth.mixins import UserPermissionMixin
 from baph.contrib.auth.registration import settings as auth_settings
-from baph.db import ORM
+from baph.db.models.base import Model as Base
 from baph.db.types import UUID, Dict, List
 from baph.utils.strings import random_string
 from baph.utils.importing import remove_class
 import inspect, sys
-
-
-orm = ORM.get()
-Base = orm.Base
 
 
 AUTH_USER_FIELD_TYPE = getattr(settings, 'AUTH_USER_FIELD_TYPE', 'UUID')
@@ -149,7 +144,6 @@ class BaseOrganization(AbstractBaseOrganization):
 class Organization(BaseOrganization):
     class Meta:
         swappable = 'BAPH_ORGANIZATION_MODEL'
-
 
 # group models
 
@@ -286,7 +280,7 @@ class AbstractBaseUser(Base, UserPermissionMixin):
     @classmethod
     def _create_user(cls, username, email, password, is_staff, is_superuser,
                      **extra_fields):
-        print '_create_user:', cls, username, email, password
+        #print '_create_user:', cls, username, email, password
         now = datetime.now()
         if not getattr(settings, 'BAPH_AUTH_WITHOUT_USERNAMES', False) and not username:
             raise ValueError('The given username must be set')
@@ -416,14 +410,12 @@ class UserGroup(Base):
     value = Column(String(32))
 
 if not hasattr(User, 'user_groups'):
-    print 'adding user_groups to User'
     rel = RelationshipProperty(UserGroup,
         backref='user',
         foreign_keys=[UserGroup.user_id])
     setattr(User, 'user_groups', rel)
 
 if not hasattr(Group, 'user_groups'):
-    print 'adding user_groups to Group'
     rel = RelationshipProperty(UserGroup,
         backref='group',
         foreign_keys=[UserGroup.group_id])
@@ -482,6 +474,7 @@ class PermissionAssociation(Base):
     user_id = Column(Integer, ForeignKey(BaseUser.id))
     group_id = Column(Integer, ForeignKey(Group.id))
     perm_id = Column(Integer, ForeignKey(Permission.id), nullable=False)
+    fields = Column(List)
 
     auth = relationship(BaseUser, backref=backref('permission_assocs',
         cascade='all, delete-orphan'))
@@ -530,12 +523,6 @@ uq = UniqueConstraint(
     PermissionAssociation.perm_id)
 
 PermissionAssociation.__table_args__ = (fk,uq) + table_args
-
-
-
-#print dir(Organization)
-#assert False
-# OAuth models
 
 MAX_KEY_LEN = 255
 MAX_SECRET_LEN = 255

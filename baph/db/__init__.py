@@ -10,12 +10,5 @@ from baph.db.utils import EngineHandler, DEFAULT_DB_ALIAS
 
 __all__ = ('ORM', 'DEFAULT_DB_ALIAS', 'engines', 'EngineHandler',
     'DatabaseError', 'IntegrityError', )
-# 'connection', 'connections', 'router', 
 
 ORM = EngineHandler(settings.DATABASES)
-
-# TODO: implement routing
-#router = ConnectionRouter()
-
-#connection = DefaultConnectionProxy()
-

@@ -2,6 +2,7 @@ from functools import wraps
 from django.conf import settings
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.core.exceptions import PermissionDenied
+from django.http import HttpResponseRedirect
 from django.utils.decorators import available_attrs
 from django.utils.encoding import force_str
 from django.utils.six.moves.urllib.parse import urlparse
@@ -12,7 +13,7 @@ import logging
 import time
 
 #from django.contrib.auth.decorators import user_passes_test
-from django.http import HttpResponseRedirect
+
 
 
 def user_passes_test(test_func, login_url=None, 

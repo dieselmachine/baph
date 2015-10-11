@@ -1,8 +1,8 @@
 import datetime
 
-from coffin.shortcuts import render_to_string
 from django.conf import settings as django_settings
 from django.core.mail import send_mail
+from django.template.loader import render_to_string
 from sqlalchemy import *
 from sqlalchemy.orm import relationship, backref, joinedload
 
@@ -10,15 +10,18 @@ from baph.contrib.auth.models import User, Organization
 from baph.contrib.auth.registration import settings
 from baph.contrib.auth.registration.utils import get_protocol
 from baph.contrib.auth.utils import generate_sha1
-from baph.db import ORM
+from baph.db.models.base import Model as Base
 
 
-orm = ORM.get()
-Base = orm.Base
+#orm = ORM.get()
+#Base = orm.Base
+
+auth_class = getattr(User, 'AUTH_CLASS', User)
+auth_col = getattr(auth_class, 'id')
 
 class UserRegistration(Base):
     __tablename__ = 'baph_auth_user_registration'
-    user_id = Column(Integer, ForeignKey(User.id), primary_key=True)
+    user_id = Column(Integer, ForeignKey(auth_col), primary_key=True)
     last_active = Column(DateTime)
     activation_key = Column(String(40))
     activation_notification_send = Column(Boolean, default=False)
@@ -26,7 +29,7 @@ class UserRegistration(Base):
     email_confirmation_key = Column(String(40))
     email_confirmation_key_created = Column(DateTime)
 
-    user = relationship(User, backref=backref('signup', uselist=False,
+    user = relationship(auth_class, backref=backref('signup', uselist=False,
         cascade='all, delete, delete-orphan'))
 
     def __unicode__(self):
@@ -67,6 +70,7 @@ class UserRegistration(Base):
                   'activation_days': settings.BAPH_ACTIVATION_DAYS,
                   'activation_key': self.activation_key,
                   'org': Organization.get_current(),
+                  'settings': django_settings,
                   }
 
         subject = render_to_string('registration/emails/activation_email_subject.txt',
@@ -98,8 +102,8 @@ class UserRegistration(Base):
                   'protocol': get_protocol(),
                   'confirmation_key': self.email_confirmation_key,
                   'org': Organization.get_current(),
+                  'settings': django_settings,
                   }
-
         # Email to the old address, if present
         subject_old = render_to_string(
             'registration/emails/confirmation_email_subject_old.txt', context)

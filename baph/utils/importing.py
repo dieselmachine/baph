@@ -8,12 +8,16 @@
 '''
 from __future__ import absolute_import
 import ast
+from importlib import import_module
+import logging
 import pkgutil
 import sys
 
 from django.conf import settings
-from django.utils.importlib import import_module
 
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class ImportTransformer(ast.NodeTransformer):
 
@@ -30,6 +34,7 @@ class ImportTransformer(ast.NodeTransformer):
         code = ['import sys\n']
         for name in node.names:
             asname = name.asname or name.name
+            logger.debug('[ImportTransformer] transforming node %s' % asname)
             if hasattr(sys.modules[node.module], name.name):
                 """
                 This was already loaded during the partial load, we'll replace
@@ -38,7 +43,10 @@ class ImportTransformer(ast.NodeTransformer):
                 """
                 line = "%s = sys.modules['%s'].%s\n" \
                     % (asname, node.module, name.name)
+                logger.debug('[ImportTransformer] %s' % line.strip())
                 code.append(line)
+            else:
+                logger.debug('[ImportTransformer] not loaded yet')
         code = ''.join(code)
 
         nodes = tuple([self.visit(n) for n in ast.parse(code).body])
@@ -167,13 +175,20 @@ def module_to_filename(module_name):
     pkg = pkgutil.get_loader(module_name)
     return pkg.filename
 
+import traceback
+
 def safe_import(path, replace_modules=[]):
     " input is a dotted path "
+    logger.debug('safe_import called:')
+    logger.debug('  path = %s' % path)
+    logger.debug('  replace_modules = %s' % replace_modules)
+    
     if not replace_modules:
         raise ValueError('replace_modules must contain at least one value')
 
     mod, name = path.rsplit('.',1)
     filename = module_to_filename(mod)
+    logger.debug('  path -> filename=%s' % filename)
     f = open(filename)
     code = f.read()
     f.close()
@@ -188,13 +203,13 @@ def safe_import(path, replace_modules=[]):
 
     while True:
         code = compile(node, filename, 'exec')
+        logger.debug('  trying to exec node %s' % node)
         try:
             exec code in sys.modules[mod].__dict__
+            logger.debug('    success')
             break
         except Exception as e:
-            print e
             exc_type, exc_value, tb_root = sys.exc_info()
-
             tb = tb_root
             while tb is not None:
                 if tb.tb_frame.f_code.co_filename == filename:
@@ -203,6 +218,8 @@ def safe_import(path, replace_modules=[]):
             if tb is None:
                 raise Exception('no tb frame contained an error in '
                     'the source file')
+            logger.debug('    exception at line %s: %s' % (tb.tb_lineno, 
+                                                         exc_value))
 
             last_valid_idx = None
             for i, item in enumerate(node.body):
@@ -210,10 +227,16 @@ def safe_import(path, replace_modules=[]):
                     last_valid_idx = i
                 else:
                     break
+            item = node.body[last_valid_idx]
+            logger.debug('    failed node index=%s' % last_valid_idx)
+            logger.debug('    failed node at line %s: %s' % (item.lineno,
+                                                           item))
+
             if not last_valid_idx:
                 raise Exception('tb line # didn\'t fall in any '
                     'ranges present in source file (how?)')
             del node.body[last_valid_idx]
+            logger.debug('    node deleted, retrying exec')
             if len(node.body) == 0:
                 raise Exception('Source AST was trimmed to zero trying to '
                     'eliminate circular import errors. "oops".')

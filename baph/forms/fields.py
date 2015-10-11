@@ -6,6 +6,7 @@ from sqlalchemy.orm.util import identity_key
 from django import forms
 from django.core import validators
 from django.core.exceptions import ImproperlyConfigured
+from django.db.models.fields import Field
 from django.utils.translation import ugettext_lazy as _
 
 
@@ -52,12 +53,12 @@ class NullCharField(forms.CharField):
             return None
         return super(NullCharField, self).to_python(value)
 
-class MultiObjectField(forms.MultipleChoiceField):
+class MultiObjectField(Field):
     """
     Field for handling of collections of objects
     """
     def __init__(self, related_class=None, collection_class=None, **kwargs):
-        print 'MOF.__init__', related_class, collection_class
+        #print 'MOF.__init__', related_class, collection_class
         self.related_class = related_class
         self.collection_class = collection_class
         super(MultiObjectField, self).__init__(**kwargs)
@@ -131,6 +132,31 @@ class MultiObjectField(forms.MultipleChoiceField):
         cls, args = identity_key(instance=value)
         text_value = ','.join(str(arg) for arg in args)
         return super(MultiObjectField, self).valid_value(text_value)
+
+class ModelChoiceField(forms.models.ModelChoiceField):
+    def prepare_value(self, value):
+        print 'prepare value'
+        if hasattr(value, '_meta'):
+            # this is an instance
+            if self.to_field_name:
+                assert False
+                return ''
+            else:
+                return value.id
+        return value
+
+    def to_python(self, value):
+        ''' override to support composite keys '''
+        print 'to_python'
+        if value in self.empty_values:
+            return None
+        try:
+            pk = value.split(',')
+            value = self.queryset.get(*pk)
+        except:
+            raise ValidationError(self.error_message['invalid_choice'],
+                code='invalid_choice')
+        return value
 
 
 class ObjectField(forms.ChoiceField):

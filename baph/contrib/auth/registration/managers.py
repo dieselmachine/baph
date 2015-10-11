@@ -7,10 +7,10 @@ from baph.contrib.auth.models import User, Organization
 from baph.contrib.auth.registration import settings as auth_settings
 from baph.contrib.auth.registration.models import UserRegistration
 from baph.contrib.auth.utils import generate_sha1
-from baph.db.orm import ORM
+#from baph.db.orm import ORM
 
 
-orm = ORM.get()
+#orm = ORM.get()
 
 SHA1_RE = re.compile('^[a-f0-9]{40}$')
 

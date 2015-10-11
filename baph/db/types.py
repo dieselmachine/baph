@@ -168,3 +168,25 @@ class TZAwareDateTime(types.TypeDecorator):
         elif x and y and is_aware(x) and is_naive(y):
             y = make_aware(y, self.tz)
         return x == y
+
+class Duration(types.TypeDecorator):
+    impl = types.Integer
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return value.total_seconds()
+
+    def process_result_value(self, value, dialect):
+        if not value:
+            return None
+        return datetime.timedelta(seconds=value)
+
+class EmailAddress(types.TypeDecorator):
+    impl = types.String
+
+class PhoneNumber(types.TypeDecorator):
+    impl = types.String
+
+class URL(types.TypeDecorator):
+    impl = types.String

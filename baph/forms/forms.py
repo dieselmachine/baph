@@ -1,40 +1,18 @@
+from collections import OrderedDict
+
 from django import forms
-from django.utils.datastructures import SortedDict
+from django.db.models.fields import Field as ModelField
+from django.forms.fields import Field
+from django.forms.widgets import MediaDefiningClass
 from django.utils.translation import ugettext_lazy as _
 from sqlalchemy import *
-from sqlalchemy import inspect
-from sqlalchemy.ext.associationproxy import AssociationProxy
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm.attributes import instance_dict
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 from sqlalchemy.orm.util import has_identity, identity_key
 from sqlalchemy.sql.expression import _BinaryExpression, _Label
 
-from baph.contrib.auth.models import Organization
 from baph.db import types, ORM
-from baph.forms import fields
-from baph.forms.widgets import ObjectSelect, MultiObjectSelect
 
-
-FIELD_MAP = {
-    String:         fields.NullCharField,
-    Text:           fields.NullCharField,
-    Unicode:        fields.NullCharField,
-    UnicodeText:    fields.NullCharField,
-    Integer:        forms.IntegerField,
-    Float:          forms.FloatField,
-    Numeric:        forms.FloatField,
-    DateTime:       forms.DateTimeField,
-    Date:           forms.DateField,
-    Time:           forms.TimeField,
-    Boolean:        forms.BooleanField,
-    types.Json:     fields.JsonField,
-    types.List:     fields.ListField,
-    types.Dict:     fields.DictField,
-    'collection':   fields.MultiObjectField,
-    'object':       fields.ObjectField,
-    }
-ALL_FIELDS = '__all__'
 
 orm = ORM.get()
 
@@ -61,258 +39,40 @@ def save_instance(form, instance, fields=None, fail_message='saved',
         raise ValueError("The %s could not be %s because the data didn't"
                          " validate." % (opts.object_name, fail_message))
 
-# ModelForms
 
-def model_to_dict(instance, fields=None, exclude=None):
-    opts = instance._meta
-    data = instance_dict(instance).copy()
-    for f in opts.fields:
-        if issubclass(f.data_type, orm.Base):
-            # skip relations
-            #assert False
-            #continue
-            pass
+class DeclarativeFieldsMetaclass(MediaDefiningClass):
+    """
+    Metaclass that collects Fields declared on the base classes.
+    """
+    def __new__(mcs, name, bases, attrs):
+        # Collect fields from current class.
+        print 'declarative fields metaclass', name, attrs
+        current_fields = []
+        for key, value in list(attrs.items()):
+            print '  field: %s' % key
+            if isinstance(value, (Field, ModelField)):
+                print '    found declared field: "%s"' % key
+                current_fields.append((key, value))
+                attrs.pop(key)
+        current_fields.sort(key=lambda x: x[1].creation_counter)
+        attrs['declared_fields'] = OrderedDict(current_fields)
 
-        if not f.editable:
-            continue
-        if fields and not f.name in fields:
-            continue
-        if exclude and f.name in exclude:
-            continue
-        try:
-            data[f.name] = f.value_from_object(instance)
-        except:
-            raise
-            pass
+        new_class = (super(DeclarativeFieldsMetaclass, mcs)
+            .__new__(mcs, name, bases, attrs))
 
-    return data
+        # Walk through the MRO.
+        declared_fields = OrderedDict()
+        for base in reversed(new_class.__mro__):
+            # Collect fields from base class.
+            if hasattr(base, 'declared_fields'):
+                declared_fields.update(base.declared_fields)
 
-def fields_for_model(model, fields=None, exclude=None, widgets=None, 
-                     formfield_callback=None, localized_fields=None,
-                     labels=None, help_texts=None, error_messages=None):
-    orm = ORM.get()
-    Base = orm.Base
-    field_list = []
-    ignored = []
-    opts = model._meta
+            # Field shadowing.
+            for attr, value in base.__dict__.items():
+                if value is None and attr in declared_fields:
+                    declared_fields.pop(attr)
 
-    # pull labels from the model, then update with local values
-    form_labels = opts.labels or {}
-    if labels:
-        form_labels.update(labels)
-
-    # pull labels from the model, then update with local values
-    form_help_texts = opts.help_texts or {}
-    if help_texts:
-        form_help_texts.update(help_texts)
-
-    print 'fields for model:', model
-    for f in sorted(opts.fields):
-        if not f.editable:
-            print 'skipping non-editable field "%s"' % f.name
-            continue
-        if fields is not None and not f.name in fields:
-            print 'skipping non-included field "%s"' % f.name
-            continue
-        if exclude and f.name in exclude:
-            print 'skipping excluded field "%s"' % f.name
-            continue
-        """
-        if issubclass(f.data_type, Base):
-            # TODO: Auto-generate fields, control via 'fields' param
-            #continue
-            pass
-        """
-        kwargs = {}
-        if widgets and f.name in widgets:
-            kwargs['widget'] = widgets[f.name]
-        if localized_fields == ALL_FIELDS or (localized_fields and f.name in localized_fields):
-            kwargs['localize'] = True
-        if form_labels and f.name in form_labels:
-            kwargs['label'] = form_labels[f.name]
-        if form_help_texts and f.name in form_help_texts:
-            kwargs['help_text'] = form_help_texts[f.name]
-        if error_messages and f.name in error_messages:
-            kwargs['error_messages'] = error_messages[f.name]
-
-        if f.collection_class:
-            kwargs['form_class'] = FIELD_MAP['collection']
-            kwargs['collection_class'] = f.collection_class
-        elif issubclass(f.data_type, Base):
-            kwargs['form_class'] = FIELD_MAP['object']
-        else:
-            kwargs['form_class'] = FIELD_MAP.get(f.data_type)
-
-        if issubclass(f.data_type, Base):
-            kwargs['related_class'] = f.data_type
-            if f.collection_class == [list]:
-                if not kwargs.get('widget', True):
-                    kwargs['widget'] = MultiObjectSelect(model=f.data_type)
-            elif not f.collection_class:
-                kwargs['widget'] = ObjectSelect(model=f.data_type)
-
-        if f.nullable or f.blank:
-            kwargs['required'] = False
-        if f.max_length and 'collection_class' not in kwargs:
-            kwargs['max_length'] = f.max_length
-
-        #if issubclass(f.data_type, Base):
-        #    assert False
-
-        if formfield_callback is None:
-            formfield = f.formfield(**kwargs)
-        elif not callable(formfield_callback):
-            raise TypeError('formfield_callback must be a function or callable')
-        else:
-            formfield = formfield_callback(f, **kwargs)
-
-        if formfield:
-            print 'adding field "%s"' % f.name
-            field_list.append((f.name, formfield))
-        else:
-            ignored.append(f.name)
-
-    field_dict = SortedDict(field_list)
-    if fields:
-        field_dict = SortedDict(
-            [(f, field_dict.get(f)) for f in fields
-                if ((not exclude) or (exclude and f not in exclude)) and (f not in ignored)]
-        )
-    return field_dict
-
-class SQLAModelFormOptions(object):
-    def __init__(self, options=None):
-        self.model = getattr(options, 'model', None)
-        self.fields = getattr(options, 'fields', None)
-        self.exclude = getattr(options, 'exclude', [])
-        self.exclude_on_create = getattr(options, 'exclude_on_create', [])
-        self.exclude_on_update = getattr(options, 'exclude_on_update', [])
-        self.exclude_on_nested = getattr(options, 'exclude_on_nested', [])
-        self.widgets = getattr(options, 'widgets', None)
-        self.localized_fields = getattr(options, 'localized_fields', None)
-        self.labels = getattr(options, 'labels', None)
-        self.help_texts = getattr(options, 'help_texts', None)
-        self.error_messages = getattr(options, 'error_messages', None)
-
-
-class SQLAModelFormMetaclass(type):
-    def __new__(cls, name, bases, attrs):
-        formfield_callback = attrs.pop('formfield_callback', None)
-        try:
-            parents = [b for b in bases if issubclass(b, SQLAModelForm)]
-        except NameError:
-            parents = None
-        declared_fields = forms.forms.get_declared_fields(bases, attrs, False)
-        new_class = super(SQLAModelFormMetaclass, cls) \
-            .__new__(cls, name, bases, attrs)
-        if not parents:
-            return new_class
-
-        if 'media' not in attrs:
-            new_class.media = forms.widgets.media_property(new_class)
-        opts = new_class._meta = SQLAModelFormOptions(getattr(new_class, 'Meta', None))
-        if opts.model:
-            # If a model is defined, extract form fields from it.
-            fields = fields_for_model(opts.model, opts.fields,
-                                      opts.exclude, opts.widgets, formfield_callback)
-            # Override default model fields with any custom declared ones
-            # (plus, include all the other declared fields).
-            fields.update(declared_fields)
-        else:
-            fields = declared_fields
+        new_class.base_fields = declared_fields
         new_class.declared_fields = declared_fields
-        new_class.base_fields = fields
+
         return new_class
-
-class BaseSQLAModelForm(forms.forms.BaseForm):
-    def __init__(self, data=None, files=None, auto_id='id_%s', prefix=None,
-                 initial=None, instance=None, nested=False, **kwargs):
-        opts = self._meta
-        exclude = list(opts.exclude)
-        if opts.model is None:
-            raise ValueError('ModelForm has no model class specified.')
-        self.nested = nested
-        if self.nested:
-            exclude.extend(opts.exclude_on_nested)
-        if instance is None:
-            exclude.extend(opts.exclude_on_create)
-            self.instance = opts.model()
-            object_data = {}
-        else:
-            self.instance = instance
-            object_data = model_to_dict(instance, opts.fields, exclude)
-            assert False
-            if has_identity(instance):
-                exclude.extend(opts.exclude_on_update)
-            else:
-                exclude.extend(opts.exclude_on_create)
-
-        if initial is not None:
-            object_data.update(initial)
-        object_data.update(data)
-        super(BaseSQLAModelForm, self).__init__(object_data, files, auto_id, prefix)
-
-        for k in exclude:
-            if k in self.fields:
-                del self.fields[k]
-
-    def save(self, commit=False):
-        """
-        Saves this ``form``'s cleaned_data into model instance
-        ``self.instance``.
-
-        If commit=True, then the changes to ``instance`` will be saved to the
-        database. Returns ``instance``.
-        """
-        if not has_identity(self.instance):
-            fail_message = 'created'
-        else:
-            fail_message = 'changed'
-        return save_instance(self, self.instance, self._meta.fields,
-                             fail_message, commit, self._meta.exclude)
-        
-class SQLAModelForm(BaseSQLAModelForm):
-    __metaclass__ = SQLAModelFormMetaclass
-
-    def clean_unique_field(self, key, **kwargs):
-        orm = ORM.get()
-        value = self.cleaned_data[key]
-        print 'val=', value
-        if value is None:
-            return value
-        filters = {
-            key: value,
-            }
-        filters.update(kwargs)
-        session = orm.sessionmaker()
-        instance = session.query(self._meta.model) \
-            .filter_by(**filters) \
-            .filter_by(**kwargs) \
-            .first()
-        if instance and instance != self.instance:
-            # this value is already in use
-            raise forms.ValidationError(_('This value is already in use'))
-        return value
-
-    def clean_org_unique_field(self, key, **kwargs):
-        orm = ORM.get()
-        org_key = Organization._meta.model_name + '_id'
-        value = self.cleaned_data[key]
-        if value is None:
-            return value
-        filters = {
-            org_key: Organization.get_current_id(),
-            key: value,
-            }
-        filters.update(kwargs)
-        session = orm.sessionmaker()
-        instance = session.query(self._meta.model) \
-            .filter_by(**filters) \
-            .filter_by(**kwargs) \
-            .first()
-        if instance and instance != self.instance:
-            # this value is already in use
-            raise forms.ValidationError(_('This value is already in use'))
-        return value
-
-

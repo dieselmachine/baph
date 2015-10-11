@@ -1,29 +1,33 @@
 # -*- coding: utf-8 -*-
+from collections import OrderedDict
 
 #from baph.sites.models import get_current_site
-from coffin.shortcuts import render_to_string
+from django.template.loader import render_to_string
 from django import forms
 from django.contrib.auth.forms import SetPasswordForm as BaseSetPasswordForm
 from django.contrib.auth.tokens import default_token_generator
 from django.template import RequestContext
-from django.utils.datastructures import SortedDict
 from django.utils.http import int_to_base36
 from django.utils.translation import ugettext_lazy as _
 
 from baph.contrib.auth.models import User, Organization #UNUSABLE_PASSWORD
-from baph.db.orm import ORM
+#from baph.db.orm import ORM
 
 
-orm = ORM.get()
+#orm = ORM.get()
 
 class PasswordResetForm(forms.Form):
     email = forms.EmailField(label=_('E-mail'), max_length=75)
 
     def clean_email(self):
         '''Validates that a user exists with the given e-mail address.'''
+        if getattr(User, 'AUTH_CLASS', None):
+            cls = User.AUTH_CLASS
+        else:
+            cls = User
         email = self.cleaned_data['email']
         session = orm.sessionmaker()
-        users = session.query(User).filter_by(email=email).all()
+        users = session.query(cls).filter_by(email=email).all()
         if len(users) == 0:
             raise forms.ValidationError(_(u'''\
 That e-mail address doesn't have an associated user account. Are you sure
@@ -43,7 +47,9 @@ That e-mail address doesn't allow the password to be set.'''))
         the user.
         '''
         from django.core.mail import send_mail
+        print 'users_cache:'
         for user in self.users_cache:
+            print '\t', user
             if not user.has_usable_password():
                 continue
             if not domain_override:
@@ -88,7 +94,8 @@ class SetPasswordForm(BaseSetPasswordForm):
         super(SetPasswordForm, self).__init__(user, *args, **kwargs)
 
     def save(self, commit=True):
-        self.user.set_password(self.cleaned_data['new_password1'])
+        user = getattr(self.user, 'auth', self.user)
+        user.set_password(self.cleaned_data['new_password1'])
         if commit:
             self.session.commit()
         return self.user
@@ -106,12 +113,13 @@ class PasswordChangeForm(SetPasswordForm):
         Validates that the old_password field is correct.
         """
         old_password = self.cleaned_data["old_password"]
-        if not self.user.check_password(old_password):
+        user = getattr(self.user, 'auth', self.user)
+        if not user.check_password(old_password):
             raise forms.ValidationError(
                 self.error_messages['password_incorrect'])
         return old_password
 
-PasswordChangeForm.base_fields = SortedDict([
+PasswordChangeForm.base_fields = OrderedDict([
     (k, PasswordChangeForm.base_fields[k])
     for k in ['old_password', 'new_password1', 'new_password2']
 ])

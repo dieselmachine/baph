@@ -1,3 +1,5 @@
+from sqlalchemy.orm.mapper import configure_mappers
+
 def setup():
     """
     Configure the settings (this happens as a side effect of accessing the
@@ -9,8 +11,8 @@ def setup():
 
     configure_logging(settings.LOGGING_CONFIG, settings.LOGGING)
     apps.populate(settings.INSTALLED_APPS)
+    configure_mappers()
+
     # hackery to fool django into not breaking during translation activation
     from django.apps import apps as django_apps
-    django_apps.apps_ready = True
-    django_apps.models_ready = True
-
+    django_apps.populate([])

@@ -1,8 +1,11 @@
 """
 Base classes for writing management commands (named commands which can
 be executed through ``django-admin.py`` or ``manage.py``).
-
 """
+from __future__ import unicode_literals
+
+from django.core.management.base import *
+'''
 import os
 import sys
 import warnings
@@ -11,29 +14,15 @@ from optparse import make_option, OptionParser
 import traceback
 
 import django
-from baph.core import checks
+from django.core import checks
 from django.core.exceptions import ImproperlyConfigured
+from django.core.management.base import (
+    CommandError, SystemCheckError, CommandParser, OutputWrapper)
 from django.core.management.color import color_style, no_style
 from django.utils.deprecation import RemovedInDjango19Warning
 from django.utils.encoding import force_str
 #from django.utils.six import StringIO
 from cStringIO import StringIO
-
-
-class CommandError(Exception):
-    """
-    Exception class indicating a problem while executing a management
-    command.
-
-    If this exception is raised during the execution of a management
-    command, it will be caught and turned into a nicely-printed error
-    message to the appropriate output stream (i.e., stderr); as a
-    result, raising this exception (with a sensible description of the
-    error) is the preferred way to indicate that something has gone
-    wrong in the execution of a command.
-
-    """
-    pass
 
 
 def handle_default_options(options):
@@ -47,29 +36,6 @@ def handle_default_options(options):
         os.environ['DJANGO_SETTINGS_MODULE'] = options.settings
     if options.pythonpath:
         sys.path.insert(0, options.pythonpath)
-
-
-class OutputWrapper(object):
-    """
-    Wrapper around stdout/stderr
-    """
-    def __init__(self, out, style_func=None, ending='\n'):
-        self._out = out
-        self.style_func = None
-        if hasattr(out, 'isatty') and out.isatty():
-            self.style_func = style_func
-        self.ending = ending
-
-    def __getattr__(self, name):
-        return getattr(self._out, name)
-
-    def write(self, msg, style_func=None, ending=None):
-        ending = ending is None and self.ending or ending
-        if ending and not msg.endswith(ending):
-            msg += ending
-        style_func = [f for f in (style_func, self.style_func, lambda x:x)
-                      if f is not None][0]
-        self._out.write(force_str(style_func(msg)))
 
 
 class BaseCommand(object):
@@ -341,7 +307,7 @@ class BaseCommand(object):
             app_configs = [app_config]
 
         return self.check(app_configs=app_configs, display_num_errors=display_num_errors)
-    '''
+    
     def validate(self, app=None, display_num_errors=False):
         """
         Validates the given app, raising CommandError for any errors.
@@ -358,7 +324,7 @@ class BaseCommand(object):
             raise CommandError("One or more models did not validate:\n%s" % error_text)
         if display_num_errors:
             self.stdout.write("%s error%s found" % (num_errors, num_errors != 1 and 's' or ''))
-    '''
+    
     def check(self, app_configs=None, tags=None, display_num_errors=False):
         """
         Uses the system check framework to validate entire Django project.
@@ -537,3 +503,4 @@ class NoArgsCommand(BaseCommand):
 
         """
         raise NotImplementedError()
+'''

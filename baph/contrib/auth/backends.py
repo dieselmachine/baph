@@ -2,10 +2,10 @@ import django.core.validators
 
 from baph.contrib.auth.models import BaseUser, User, Organization
 from baph.contrib.auth.registration import settings as auth_settings
-from baph.db.orm import ORM
+#from baph.db.orm import ORM
 
 
-orm = ORM.get()
+#orm = ORM.get()
 
 class MultiSQLAlchemyBackend(object):
     """Backend which auths via username or email"""
@@ -93,10 +93,8 @@ class MultiSQLAlchemyBackend2(object):
 
     def get_org_user(self, user_id, org_id):
         print 'get_org_user', user_id, org_id
-        session = orm.sessionmaker()
         org_col = getattr(User, Organization.get_column_key())
-        user = session.query(User) \
-            .filter(org_col==org_id) \
+        user = User.objects.filter(org_col==org_id) \
             .filter(User.user_id==user_id) \
             .first()
         print 'user:', user

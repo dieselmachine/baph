@@ -8,11 +8,10 @@ import sys
 
 from baph.apps import apps
 from django.template.base import TemplateDoesNotExist
-from django.template.loader import BaseLoader
+from django.template.loader import BaseLoader, get_template
 from django.utils._os import safe_join
 from django.utils import six
 
-from coffin.template.loader import get_template
 from jinja2.loaders import FileSystemLoader
 
 

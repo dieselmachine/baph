@@ -1,11 +1,8 @@
-from baph.db.orm import ORM
-
+from django.core.validators import EMPTY_VALUES
 from django.forms.widgets import TextInput, DateInput, DateTimeInput, TimeInput, Select, SelectMultiple
 from sqlalchemy.orm import class_mapper
 from sqlalchemy.orm.util import identity_key
 
-
-orm = ORM.get()
 
 class HTML5EmailInput(TextInput):
     input_type = 'email'
@@ -28,7 +25,9 @@ class ObjectSelect(Select):
         super(ObjectSelect, self).__init__(*args, **kwargs)
 
     def value_from_datadict(self, data, files, name):
-        value = data.get(name, None)
+        value = super(ObjectSelect, self).value_from_datadict(data, files, name)
+        if value in EMPTY_VALUES:
+            return None
         session = orm.sessionmaker()
         obj = session.query(self.model).get(value.split(','))
         return obj

@@ -3,8 +3,8 @@ import inspect
 import re
 from uuid import UUID
 
-from coffin.shortcuts import render_to_response
-from coffin.template import RequestContext
+from django.shortcuts import render_to_response
+from django.template import RequestContext
 from django.conf import settings
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth.forms import AuthenticationForm
@@ -133,8 +133,13 @@ def password_reset(request, is_admin_site=False,
                    password_reset_form=PasswordResetForm,
                    token_generator=default_token_generator,
                    post_reset_redirect=None):
-    if post_reset_redirect is None:
-        post_reset_redirect = reverse('baph.contrib.auth.views.password_reset_done')
+    if post_reset_redirect:
+        try:
+            post_reset_redirect = reverse(post_reset_redirect)
+        except:
+            pass
+    else:
+        post_reset_redirect = reverse('password_reset_done')
     if request.method == "POST":
         form = password_reset_form(request.POST)
         if form.is_valid():
@@ -169,12 +174,13 @@ def password_reset_confirm(request, uidb36=None, token=None,
     '''
     assert uidb36 is not None and token is not None  # checked by URLconf
     if post_reset_redirect is None:
-        post_reset_redirect = reverse('baph.contrib.auth.views.password_reset_complete')
+        post_reset_redirect = reverse('password_reset_complete')
     else:
-        post_reset_redirect = resolve_url(post_reset_redirect)
+        post_reset_redirect = reverse(post_reset_redirect)
     try:
         uid = base36_to_int(uidb36)
-        user = get_object_or_404(User, id=uid)
+        auth_cls = getattr(User, 'AUTH_CLASS', User)
+        user = get_object_or_404(auth_cls, id=uid)
     except (TypeError, ValueError, OverflowError):
         user = None
 

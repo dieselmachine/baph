@@ -1,24 +1,24 @@
 import collections
 from itertools import tee
-from types import FunctionType
+#from types import FunctionType
 
 from django import forms
-from django.core import validators
+#from django.core import validators
 from django.utils.encoding import smart_text, force_text, force_bytes
 from django.utils.text import capfirst
 from sqlalchemy import *
-from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
-from sqlalchemy.ext.declarative.clsregistry import _class_resolver
-from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
-from sqlalchemy.ext.orderinglist import OrderingList
-from sqlalchemy.orm.collections import MappedCollection
+from sqlalchemy.ext.associationproxy import *
+#from sqlalchemy.ext.declarative.clsregistry import _class_resolver
+from sqlalchemy.ext.hybrid import *
+#from sqlalchemy.ext.orderinglist import OrderingList
+#from sqlalchemy.orm.collections import MappedCollection
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 from sqlalchemy.orm.util import identity_key
 
 from baph.db import types
-from baph.forms import fields
+#from baph.forms import fields
 
-
+"""
 FIELD_MAP = {
     String:         forms.CharField,
     Text:           forms.CharField,
@@ -42,10 +42,13 @@ COLLECTION_MAP = {
     OrderingList:   types.List,
     MappedCollection:   types.Dict,
     }
-
+"""
 class NOT_PROVIDED:
     pass
 
+
+
+"""
 def get_related_class_from_attr(attr):
     prop = attr.property
     related_cls = prop.argument
@@ -58,7 +61,8 @@ def get_related_class_from_attr(attr):
     if isinstance(related_cls, _class_resolver):
         related_cls = related_cls()
     return related_cls
-
+"""
+"""
 def normalize_collection_class(collection_class):
     if isinstance(collection_class, FunctionType):
         # lambda-based evaluator, call it and check the type
@@ -70,7 +74,7 @@ def normalize_collection_class(collection_class):
     if collection_class in (set, list, OrderingList):
         return list
     raise Exception('Unknown collection_class: %s' % collection_class)
-
+"""
 class Field(object):
 
     creation_counter = 0
@@ -81,9 +85,10 @@ class Field(object):
                   default=None, data_type=None, auto_created=False,
                   auto=False, collection_class=None, proxy=False,
                   help_text='', choices=None, uselist=False, required=False,
-                  max_length=None
+                  max_length=None, attname=None
                 ):
         self.name = name
+        self.attname = name
         self.verbose_name = verbose_name or capfirst(self.name)
         self.primary_key = primary_key
         self._unique = unique
@@ -105,35 +110,6 @@ class Field(object):
         else:
             self.creation_counter = Field.creation_counter
             Field.creation_counter += 1
-
-    def as_form_field(self):
-        from baph.db.orm import Base
-        kwargs = {}
-        
-        if issubclass(self.data_type, Base):
-            kwargs['related_class'] = self.data_type
-            field_cls = fields.ObjectField
-        if self.collection_class is not None:
-            kwargs['collection_class'] = self.collection_class
-            field_cls = fields.MultiObjectField
-        if not kwargs:
-            field_cls = FIELD_MAP[self.data_type]
-        return self.formfield(field_cls, **kwargs)
-            
-        if self.data_collection in COLLECTION_MAP:
-            type_ = COLLECTION_MAP[self.data_collection]
-        elif self.uselist:
-            type_ = types.List
-        elif issubclass(self.data_type, Base):
-            type_ = object
-        else:
-            type_ = self.data_type
-        kwargs = {
-            'required': self.required,
-            'initial': self.default,
-            }
-        field = FIELD_MAP[type_](**kwargs)
-        return field
 
     @property
     def unique(self):
@@ -163,24 +139,20 @@ class Field(object):
             return force_text(self.default, strings_only=True)
         return None
 
-    def as_form_field(self):
-        from baph.db.orm import Base
-        kwargs = {
-            'required': self.required,
-            'initial': self.default,
-            }
-        if issubclass(self.data_type, Base):
-            kwargs['related_class'] = self.data_type
+    
+    def pre_save(self, model_instance, add):
+        """
+        Returns field's value just before saving.
+        """
+        return getattr(model_instance, self.attname)
 
-        if self.collection_class:
-            field = fields.MultiObjectField
-        elif issubclass(self.data_type, Base):
-            field = fields.ObjectField
-        else:
-            field = FIELD_MAP[self.data_type]
-        return field(**kwargs)
+    def save_form_data(self, instance, data):
+        print 'save form data:', (instance, data)
+        setattr(instance, self.name, data)
 
-    def formfield(self, form_class=None, **kwargs):
+    def formfield(self, form_class=None, choices_form_class=None, **kwargs):
+        from baph.db.models.base import Model as Base
+
         defaults = {'required': self.required,
                     'label': capfirst(self.verbose_name),
                     'help_text': self.help_text}
@@ -190,6 +162,26 @@ class Field(object):
                 defaults['show_hidden_initial'] = True
             else:
                 defaults['initial'] = self.get_default()
+
+        if self.collection_class is not None:
+            defaults['collection_class'] = self.collection_class
+            if issubclass(self.data_type, Base):
+                defaults['related_class'] = self.data_type
+            form_class = fields.MultiObjectField
+
+        if form_class is None and self.data_type in FIELD_MAP:
+            form_class = FIELD_MAP[self.data_type]
+        #return self.formfield(field_cls, **kwargs)
+        '''
+        if self.data_collection in COLLECTION_MAP:
+            type_ = COLLECTION_MAP[self.data_collection]
+        elif self.uselist:
+            type_ = types.List
+        elif issubclass(self.data_type, Base):
+            type_ = object
+        else:
+            type_ = self.data_type
+        '''
         # TODO: convert the 'choices' logic?
         ''' 
         if self.choices:
@@ -215,10 +207,12 @@ class Field(object):
         defaults.update(kwargs)
         if form_class is None:
             form_class = fields.NullCharField
+        #print form_class, defaults
         return form_class(**defaults)
 
-    def clean(self, value):
-        return self.as_form_field().clean(value)
+    def clean(self, value, model_instance):
+        print 'clean:', (self, value, model_instance)
+        return self.formfield().clean(value)
 
     @classmethod
     def field_from_attr(cls, key, attr, model):
@@ -227,6 +221,8 @@ class Field(object):
 
     @classmethod
     def field_kwargs_from_attr(cls, key, attr, model):
+        #print (cls, key, attr, model)
+        #info = dict((k, getattr(attr, k, None)) for k in dir(attr))
         if attr.extension_type == ASSOCIATION_PROXY:
             kwargs = cls.field_kwargs_from_proxy(key, attr, model)
         elif isinstance(attr.property, ColumnProperty):
@@ -236,6 +232,7 @@ class Field(object):
         else:
             raise Exception('field_kwargs_from_attr can only be called on'
                              'proxies, columns, and relationships')
+        kwargs['attname'] = key
         return kwargs
 
     @classmethod

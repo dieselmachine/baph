@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
-from baph.db.orm import ORM
+#from baph.db.orm import ORM
 from django.http import Http404
 
-orm = ORM.get()
+#orm = ORM.get()
 
 
 def get_object_or_404(klass, **kwargs):

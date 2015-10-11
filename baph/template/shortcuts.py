@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
-
-from baph.utils.importing import import_attr
-base_render_to_response = import_attr(['coffin.shortcuts'],
-                                      ['render_to_response'])
-RequestContext = import_attr(['coffin.template'], 'RequestContext')
-get_template, select_template = \
-    import_attr(['coffin.template.loader'],
-                ['get_template', 'select_template'])
+from django.shortcuts import render_to_response as r2r
+from django.template import RequestContext
+from django.template.loader import get_template, select_template
 
 __all__ = ['render_to_string', 'render_to_response']
 
@@ -19,9 +14,9 @@ def render_to_response(template_name, dictionary=None, request=None,
     :func:`coffin.shortcuts.render_to_response`.
     '''
     request_context = RequestContext(request) if request else None
-    return base_render_to_response(template_name, dictionary=dictionary,
-                                   context_instance=request_context,
-                                   mimetype=mimetype)
+    return r2r(template_name, dictionary=dictionary,
+               context_instance=request_context,
+               mimetype=mimetype)
 
 
 def render_to_string(template_or_template_name, dictionary=None, request=None):

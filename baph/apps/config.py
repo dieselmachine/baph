@@ -88,12 +88,17 @@ class AppConfig(object):
             module = import_module(entry)
 
         except ImportError:
+            # Track that importing as an app module failed. If importing as an
+            # app config class fails too, we'll trigger the ImportError again.
+            module = None
+
             mod_path, _, cls_name = entry.rpartition('.')
 
             # Raise the original exception when entry cannot be a path to an
             # app config class.
             if not mod_path:
                 raise
+
 
         else:
             try:
@@ -105,20 +110,18 @@ class AppConfig(object):
             else:
                 mod_path, _, cls_name = entry.rpartition('.')
 
-        # If we're reaching this point, we must load the app config class
-        # located at <mod_path>.<cls_name>.
-
-        # Avoid django.utils.module_loading.import_by_path because it
-        # masks errors -- it reraises ImportError as ImproperlyConfigured.
+        # If we're reaching this point, we must attempt to load the app config
+        # class located at <mod_path>.<cls_name>
         mod = import_module(mod_path)
         try:
             cls = getattr(mod, cls_name)
         except AttributeError:
-            # Emulate the error that "from <mod_path> import <cls_name>"
-            # would raise when <mod_path> exists but not <cls_name>, with
-            # more context (Python just says "cannot import name ...").
-            raise ImportError(
-                "cannot import name '%s' from '%s'" % (cls_name, mod_path))
+            if module is None:
+                # If importing as an app module failed, that error probably
+                # contains the most informative traceback. Trigger it again.
+                import_module(entry)
+            else:
+                raise
 
         # Check for obvious errors. (This check prevents duck typing, but
         # it could be removed if it became a problem in practice.)

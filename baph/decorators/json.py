@@ -6,16 +6,15 @@
 .. moduleauthor:: Mark Lee <markl@evomediagroup.com>
 .. moduleauthor:: JT Thibault <jt@evomediagroup.com>
 '''
-
 from __future__ import absolute_import
+import json
 
-from baph.utils.importing import import_any_module, import_attr
-render_to_response = import_attr(['coffin.shortcuts'], 'render_to_response')
+from baph.utils.importing import import_attr
+from django.shortcuts import render_to_response
 from django.http import (
     HttpResponse, HttpResponseRedirect, HttpResponseForbidden)
 RequestContext = import_attr(['django.template'], 'RequestContext')
 from functools import wraps
-json = import_any_module(['json', 'simplejson', 'django.utils.simplejson'])
 
 
 def data_to_json_response(data, **kwargs):

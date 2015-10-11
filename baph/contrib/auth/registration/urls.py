@@ -1,7 +1,7 @@
 try:
-    from coffin.conf.urls.defaults import *
+    from django.conf.urls import *
 except:
-    from coffin.conf.urls import *
+    from django.conf.urls import *
     
 from django.contrib.auth import views as auth_views
 
@@ -51,14 +51,16 @@ urlpatterns = patterns('',
        name='baph_password_reset'),
     url(r'^password/reset/confirm/(?P<uidb36>[0-9A-Za-z]+)-(?P<token>.+)/$',
        'baph.contrib.auth.views.password_reset_confirm',
-       {'template_name': 'registration/password_reset_confirm_form.html'},
+       {'template_name': 'registration/password_reset_confirm_form.html',
+        'post_reset_redirect': 'baph_password_reset_complete',
+       },
        name='baph_password_reset_confirm'),
     url(r'^password/reset/done/$',
        'baph.contrib.auth.views.password_reset_done',
        {'template_name': 'registration/password_reset_done.html'},
        name='baph_password_reset_done'),
     url(r'^password/reset/confirm/complete/$',
-       auth_views.password_reset_complete,
+       'baph.contrib.auth.views.password_reset_complete',
        {'template_name': 'registration/password_reset_complete.html'},
         name='baph_password_reset_complete'),
 
@@ -72,6 +74,10 @@ urlpatterns = patterns('',
     url(r'^email/$',
        'baph.contrib.auth.registration.views.email_change',
        name='baph_email_change'),
+    url(r'^confirm-email/complete/$',
+       'baph.contrib.auth.registration.views.direct_to_template',
+       {'template_name': 'registration/email_confirm_complete.html'},
+       name='baph_email_confirm_complete'),
     url(r'^confirm-email/(?P<confirmation_key>\w+)/$',
        'baph.contrib.auth.registration.views.email_confirm',
        name='baph_email_confirm'),
@@ -79,10 +85,6 @@ urlpatterns = patterns('',
        'baph.contrib.auth.registration.views.direct_to_user_template',
        {'template_name': 'registration/email_change_complete.html'},
        name='baph_email_change_complete'),
-    url(r'^confirm-email/complete/$',
-       'baph.contrib.auth.registration.views.direct_to_template',
-       {'template_name': 'registration/email_confirm_complete.html'},
-       name='baph_email_confirm_complete'),
 
 
    )

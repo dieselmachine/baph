@@ -27,7 +27,7 @@ class SSLRedirect(object):
 
     .. code-block:: python
 
-       from coffin.conf.urls.defaults import patterns
+       from django.conf.urls import patterns
 
        urlpatterns = patterns('foo.views',
            (r'^/$', 'front'),

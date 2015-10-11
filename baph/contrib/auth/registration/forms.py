@@ -16,11 +16,12 @@ from sqlalchemy.orm import joinedload
 from baph.contrib.auth.models import User, Organization
 from baph.contrib.auth.registration import settings
 from baph.contrib.auth.registration.managers import SignupManager
+from baph.contrib.auth.registration.models import UserRegistration
 from baph.contrib.auth.utils import generate_sha1
-from baph.db.orm import ORM
+#from baph.db.orm import ORM
 
 
-orm = ORM.get()
+#orm = ORM.get()
 
 attrs_dict = {'class': 'required'}
 
@@ -242,4 +243,12 @@ class ChangeEmailForm(forms.Form):
         email address.
 
         """
-        return self.user.signup.change_email(self.cleaned_data['email'])
+        auth = getattr(self.user, 'auth', self.user)
+        signup = auth.signup
+        if not signup:
+            signup = UserRegistration(user_id=auth.id)
+            session = orm.sessionmaker()
+            session.add(signup)
+            session.commit()
+        return signup.change_email(self.cleaned_data['email'])    
+

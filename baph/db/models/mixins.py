@@ -420,7 +420,6 @@ class ModelPermissionMixin(object):
                       key in cls._meta.permission_full_parents
             sub_fks = sub_cls.get_fks(include_parents=inc_par,
                                       remote_key=remote_col.key)
-
             for limiter, key_, value, col_key, base_cls in sub_fks:
                 if not key_:
                     # do not extend the 'any' permission
@@ -428,9 +427,9 @@ class ModelPermissionMixin(object):
 
                 # prepend the current node string to each filter in the 
                 # limiter expression
-                frags = key_.split(',')
-                frags = ['%s.%s' % (key, frag) for frag in frags]
-                key_ = ','.join(frags)
+                key_frags = key_.split(',')
+                key_frags = ['%s.%s' % (key, frag) for frag in key_frags]
+                key_ = ','.join(key_frags)
 
                 frags = value.split(',')
                 if len(frags) > 1:
@@ -457,6 +456,8 @@ class ModelPermissionMixin(object):
                     # and just use the value of the fk instead
                     limiter = key_.split('.')[-2]
                     value = '%%(%s)s' % col_key
+                #else:
+                #    limiter = '%s %s' % (limiter, base_cls.lower())
 
                 keys.append( (limiter, key_, value, col_key, cls_name) )
         return keys

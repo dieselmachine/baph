@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 '''Views which allow users to create and activate accounts.'''
-from coffin.shortcuts import render_to_response, redirect
-from coffin.template import RequestContext
+from django.shortcuts import render_to_response, redirect
+from django.template import RequestContext
 from django.conf import settings as django_settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, REDIRECT_FIELD_NAME
@@ -22,10 +22,10 @@ from baph.contrib.auth.registration.managers import SignupManager
 from baph.contrib.auth.registration.models import UserRegistration
 from baph.contrib.auth.registration.utils import signin_redirect
 from baph.contrib.auth.views import logout as Signout
-from baph.db.orm import ORM
+#from baph.db.orm import ORM
 
 
-orm = ORM.get()
+#orm = ORM.get()
 
 @secure_required
 def signup(request, signup_form=SignupForm,
@@ -256,7 +256,7 @@ def direct_to_template(request, template_name=None, extra_context=None):
 
 def direct_to_user_template(request, template_name=None, extra_context=None):
     if not extra_context: extra_context = dict()
-    extra_context['viewed_user'] = request.user
+    extra_context['viewed_user'] = getattr(request.user, 'auth', request.user)
     return render_to_response(template_name, extra_context,
         context_instance=RequestContext(request))
 
@@ -428,6 +428,7 @@ def email_confirm(request, confirmation_key,
 
         if success_url: redirect_to = success_url
         else: redirect_to = reverse('baph_email_confirm_complete')
+        
         return redirect(redirect_to)
     else:
         if not extra_context: extra_context = dict()
