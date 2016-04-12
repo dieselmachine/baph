@@ -13,13 +13,13 @@ http://code.djangoproject.com/ticket/5446/
 Attachment: country_and_language_fields_trunk.4.patch
 '''
 from __future__ import unicode_literals
+from importlib import import_module
 from itertools import chain
 
 from django import forms
 from django.conf import settings
 from django.utils.encoding import force_unicode
 from django.utils.html import escape, conditional_escape
-from django.utils.importlib import import_module
 from django.utils.translation import ugettext_lazy as _
 
 from baph.utils.importing import import_any_module, import_attr

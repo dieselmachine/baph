@@ -2,6 +2,7 @@ import inspect as inspect_
 from types import FunctionType
 
 from baph.db import types
+from baph.db.models import fields
 from django.db.models import fields as modelfields
 from jsonfield import JSONField
 from sqlalchemy import *
@@ -47,8 +48,8 @@ MODELFIELD_MAP = {
     types.URL:                  modelfields.URLField,
     'binary':                   modelfields.BinaryField,
     #'uuid':                    modelfields.UUIDField,
-    'file':                     modelfields.files.FileField,
-    'image':                    modelfields.files.ImageField,
+    'file':                     fields.FileField,
+    types.Image:                fields.ImageField,
     JSON:                       JSONField,
     types.Dict:                 JSONField,
     types.PhoneNumber:          modelfields.CharField,
@@ -223,6 +224,7 @@ def sqla_attr_to_modelfield(key, attr, model):
     prop = attr
     from baph.db.models.base import Model as Base
     from baph.forms.models import fields
+    from baph.db.models.fields import ForeignKey
     kwargs = field_kwargs_from_attr(key, attr, model)
     auto = kwargs.pop('_auto', None)
     data_type = kwargs.pop('data_type')
@@ -239,7 +241,7 @@ def sqla_attr_to_modelfield(key, attr, model):
                 kwargs['to_field'] = to_field
                 if prop.back_populates:
                     kwargs['related_name'] = prop.back_populates
-                form_class = modelfields.related.ForeignKey
+                form_class = ForeignKey
             else:
                 kwargs['to'] = data_type
                 kwargs['to_field'] = to_field
@@ -260,20 +262,24 @@ def sqla_attr_to_modelfield(key, attr, model):
 
     #if form_class in (modelfields.CharField, modelfields.BooleanField):
     #    kwargs.pop('nullable', None)
-
     form_field = form_class(**kwargs)
     #assert False
     return form_field
 
 def field_kwargs_from_attr(key, attr, model):
     if attr.is_attribute:
+        assert False
         attr = attr.prop
 
     if attr.extension_type == ASSOCIATION_PROXY:
         return field_kwargs_from_proxy(key, attr, model)
 
     if isinstance(attr, ColumnProperty):
-        return field_kwargs_from_column(key, attr, model)
+        info = attr.class_attribute.info
+        kwargs = field_kwargs_from_column(key, attr, model)
+        if 'type' in info:
+            kwargs['data_type'] = info['type']
+        return kwargs
 
     if isinstance(attr, RelationshipProperty):
         return field_kwargs_from_relationship(key, attr, model)
@@ -291,6 +297,7 @@ def field_kwargs_from_column(key, prop, model):
     kwargs['data_type'] = type(col.type)
     if len(col.proxy_set) == 1:
         # single column
+        kwargs['primary_key'] = col.primary_key
         kwargs['db_column'] = col.name
         kwargs['null'] = col.nullable
         kwargs['_auto'] = col.primary_key \
@@ -314,6 +321,10 @@ def field_kwargs_from_column(key, prop, model):
             kwargs['blank'] = False
         if hasattr(col.type, 'length'):
             kwargs['max_length'] = col.type.length
+        if hasattr(col.type, 'upload_to'):
+            kwargs['upload_to'] = col.type.upload_to
+        if hasattr(col.type, 'storage'):
+            kwargs['storage'] = col.type.storage
     else:
         # multiple join elements, make it readonly
         kwargs['editable'] = False
@@ -327,7 +338,11 @@ def field_kwargs_from_relationship(key, prop, model):
     kwargs['null'] = True
     kwargs['editable'] = not prop.viewonly
     kwargs['_direction'] = prop.direction
+    rs = prop.remote_side
+    local_col = prop.local_columns.pop()
     remote_col = prop.remote_side.pop()
+    d = dir(prop)
+    kwargs['db_column'] = local_col.name
     kwargs['_remote_col'] = remote_col.name
     kwargs.update(prop.info)
     return kwargs

@@ -46,7 +46,175 @@ COLLECTION_MAP = {
 class NOT_PROVIDED:
     pass
 
+from django.core.files.base import File
+from django.db.models.fields import files, related
+from django.utils import six
+from sqlalchemy.orm.attributes import InstrumentedAttribute
+from sqlalchemy.orm.base import instance_state, instance_dict
 
+class FileDescriptor(InstrumentedAttribute, files.FileDescriptor):
+
+    def __init__(self, field):
+        attr = getattr(field.model, field.name)
+        super(FileDescriptor, self).__init__(attr.class_, attr.key,
+            impl=attr.impl, comparator=attr.comparator,
+            parententity=attr._parententity, of_type=attr._of_type)
+        self.field = field
+
+    def __set__(self, instance, value):
+        InstrumentedAttribute.__set__(self, instance, value)
+
+    def __get__(self, instance, owner):
+        print '__get__'
+        if instance is None:
+            return self
+        return files.FileDescriptor.__get__(self, instance, owner)
+
+        dict_ = instance_dict(instance)
+        if self._supports_population and self.key in dict_:
+            file = dict_[self.key]
+        else:
+            file = self.impl.get(instance_state(instance), dict_)
+
+        # This is slightly complicated, so worth an explanation.
+        # instance.file`needs to ultimately return some instance of `File`,
+        # probably a subclass. Additionally, this returned object needs to have
+        # the FieldFile API so that users can easily do things like
+        # instance.file.path and have that delegated to the file storage engine.
+        # Easy enough if we're strict about assignment in __set__, but if you
+        # peek below you can see that we're not. So depending on the current
+        # value of the field we have to dynamically construct some sort of
+        # "thing" to return.
+
+        # The instance dict contains whatever was originally assigned
+        # in __set__.
+        #file = instance.__dict__[self.field.name]
+
+        # If this value is a string (instance.file = "path/to/file") or None
+        # then we simply wrap it with the appropriate attribute class according
+        # to the file field. [This is FieldFile for FileFields and
+        # ImageFieldFile for ImageFields; it's also conceivable that user
+        # subclasses might also want to subclass the attribute class]. This
+        # object understands how to convert a path to a file, and also how to
+        # handle None.
+        if isinstance(file, six.string_types) or file is None:
+            attr = self.field.attr_class(instance, self.field, file)
+            instance.__dict__[self.field.name] = attr
+
+        # Other types of files may be assigned as well, but they need to have
+        # the FieldFile interface added to them. Thus, we wrap any other type of
+        # File inside a FieldFile (well, the field's attr_class, which is
+        # usually FieldFile).
+        elif isinstance(file, File) and not isinstance(file, files.FieldFile):
+            file_copy = self.field.attr_class(instance, self.field, file.name)
+            file_copy.file = file
+            file_copy._committed = False
+            instance.__dict__[self.field.name] = file_copy
+
+        # Finally, because of the (some would say boneheaded) way pickle works,
+        # the underlying FieldFile might not actually itself have an associated
+        # file. So we need to reset the details of the FieldFile in those cases.
+        elif isinstance(file, files.FieldFile) and not hasattr(file, 'field'):
+            file.instance = instance
+            file.field = self.field
+            file.storage = self.field.storage
+
+        # That was fun, wasn't it?
+        return instance.__dict__[self.field.name]
+
+
+    '''
+    def __set__(self, instance, value):
+        self.impl.set(instance_state(instance),
+                      instance_dict(instance), value, None)
+
+    def __delete__(self, instance):
+        self.impl.delete(instance_state(instance), instance_dict(instance))
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+
+        dict_ = instance_dict(instance)
+        if self._supports_population and self.key in dict_:
+            return dict_[self.key]
+        else:
+            return self.impl.get(instance_state(instance), dict_)
+
+
+    def __init__(self, field):
+        self.field = field
+
+    def __get__(self, instance=None, owner=None):
+        if instance is None:
+            return self
+
+        # This is slightly complicated, so worth an explanation.
+        # instance.file`needs to ultimately return some instance of `File`,
+        # probably a subclass. Additionally, this returned object needs to have
+        # the FieldFile API so that users can easily do things like
+        # instance.file.path and have that delegated to the file storage engine.
+        # Easy enough if we're strict about assignment in __set__, but if you
+        # peek below you can see that we're not. So depending on the current
+        # value of the field we have to dynamically construct some sort of
+        # "thing" to return.
+
+        # The instance dict contains whatever was originally assigned
+        # in __set__.
+        file = instance.__dict__[self.field.name]
+
+        # If this value is a string (instance.file = "path/to/file") or None
+        # then we simply wrap it with the appropriate attribute class according
+        # to the file field. [This is FieldFile for FileFields and
+        # ImageFieldFile for ImageFields; it's also conceivable that user
+        # subclasses might also want to subclass the attribute class]. This
+        # object understands how to convert a path to a file, and also how to
+        # handle None.
+        if isinstance(file, six.string_types) or file is None:
+            attr = self.field.attr_class(instance, self.field, file)
+            instance.__dict__[self.field.name] = attr
+
+        # Other types of files may be assigned as well, but they need to have
+        # the FieldFile interface added to them. Thus, we wrap any other type of
+        # File inside a FieldFile (well, the field's attr_class, which is
+        # usually FieldFile).
+        elif isinstance(file, File) and not isinstance(file, FieldFile):
+            file_copy = self.field.attr_class(instance, self.field, file.name)
+            file_copy.file = file
+            file_copy._committed = False
+            instance.__dict__[self.field.name] = file_copy
+
+        # Finally, because of the (some would say boneheaded) way pickle works,
+        # the underlying FieldFile might not actually itself have an associated
+        # file. So we need to reset the details of the FieldFile in those cases.
+        elif isinstance(file, FieldFile) and not hasattr(file, 'field'):
+            file.instance = instance
+            file.field = self.field
+            file.storage = self.field.storage
+
+        # That was fun, wasn't it?
+        return instance.__dict__[self.field.name]
+
+    def __set__(self, instance, value):
+        instance.__dict__[self.field.name] = value
+    '''
+
+class ForeignKey(related.ForeignKey):
+    def get_attname(self):
+        return self.db_column
+
+class FileField(files.FileField):
+    descriptor_class = FileDescriptor
+
+class ImageField(files.ImageField):
+    descriptor_class = FileDescriptor    
+
+    #def get_prep_lookup(self, lookup_type, value):
+    #    assert False
+
+    #def get_prep_value(self, value):
+    #    v = super(ImageField, self).get_prep_value(value)
+    #    assert False
 
 """
 def get_related_class_from_attr(attr):

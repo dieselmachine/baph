@@ -13,17 +13,19 @@ def login(request, user):
     :param user: The user object.
     :type user: :class:`baph.contrib.auth.models.User`
     '''
+    '''
     if hasattr(request, 'orm'):
         session = request.orm.sessionmaker()
     else:
         from .models import orm
         session = orm.sessionmaker()
+    '''
     if user is None:
         user = request.user
     # TODO: It would be nice to support different login methods, like signed
     # cookies.
     user.last_login = datetime.now()
-    session.commit()
+    user.save()
 
     if SESSION_KEY in request.session:
         if request.session[SESSION_KEY] != user.id:

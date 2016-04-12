@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 '''Views which allow users to create and activate accounts.'''
-from django.shortcuts import render_to_response, redirect
-from django.template import RequestContext
+from django.shortcuts import render_to_response, redirect, render
 from django.conf import settings as django_settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, REDIRECT_FIELD_NAME
@@ -22,10 +21,7 @@ from baph.contrib.auth.registration.managers import SignupManager
 from baph.contrib.auth.registration.models import UserRegistration
 from baph.contrib.auth.registration.utils import signin_redirect
 from baph.contrib.auth.views import logout as Signout
-#from baph.db.orm import ORM
 
-
-#orm = ORM.get()
 
 @secure_required
 def signup(request, signup_form=SignupForm,
@@ -59,8 +55,7 @@ def signup(request, signup_form=SignupForm,
 
     if not extra_context: extra_context = dict()
     extra_context['form'] = form
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 @secure_required
 def activate(request, activation_key,
@@ -74,8 +69,7 @@ def activate(request, activation_key,
         .first()
     if not signup:
         if not extra_context: extra_context = dict()
-        return render_to_response(template_name, extra_context,
-            context_instance=RequestContext(request))
+        return render(request, template_name, extra_context)
     if (not signup.activation_key_expired() 
         or not settings.BAPH_ACTIVATION_RETRY):
         user = SignupManager.activate_user(activation_key)
@@ -92,13 +86,11 @@ def activate(request, activation_key,
             return redirect(redirect_to)
         else:
             if not extra_context: extra_context = dict()
-            return render_to_response(template_name, extra_context,
-                context_instance=RequestContext(request))
+            return render(request, template_name, extra_context)
     else:
         if not extra_context: extra_context = dict()
         extra_context['activation_key'] = activation_key
-        return render_to_response(retry_template_name, extra_context,
-            context_instance=RequestContext(request))
+        return render(request, retry_template_name, extra_context)
 
 @secure_required
 def activate_retry(request, activation_key,
@@ -134,8 +126,7 @@ def activate_retry(request, activation_key,
             new_key = SignupManager.reissue_activation(activation_key)
             if new_key:
                 if not extra_context: extra_context = dict()
-                return render_to_response(template_name, extra_context,
-                    context_instance=RequestContext(request))
+                return render(request, template_name, extra_context)
             else:
                 return redirect(reverse('baph_activate', args=(activation_key,)))
         else:
@@ -219,8 +210,7 @@ def signin(request, auth_form=AuthenticationForm,
         'form': form,
         'next': request.REQUEST.get(redirect_field_name),
     })
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 @secure_required
 def signout(request, next_page=settings.BAPH_REDIRECT_ON_SIGNOUT,
@@ -246,19 +236,16 @@ def signout(request, next_page=settings.BAPH_REDIRECT_ON_SIGNOUT,
 def signup_complete(request, template_name='registration/signup_complete.html',
                      extra_context=None):
     if not extra_context: extra_context = dict()
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 def direct_to_template(request, template_name=None, extra_context=None):
     if not extra_context: extra_context = dict()
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 def direct_to_user_template(request, template_name=None, extra_context=None):
     if not extra_context: extra_context = dict()
     extra_context['viewed_user'] = getattr(request.user, 'auth', request.user)
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 @secure_required
 def email_change(request, email_form=ChangeEmailForm,
@@ -310,21 +297,20 @@ def email_change(request, email_form=ChangeEmailForm,
     form = email_form(user)
 
     if request.method == 'POST':
-        form = email_form(user,
-                               request.POST,
-                               request.FILES)
+        form = email_form(user, request.POST, request.FILES)
 
         if form.is_valid():
-            email_result = form.save()
+            form.save()
 
-            if success_url: redirect_to = success_url
-            else: redirect_to = reverse('baph_email_change_complete')
+            if success_url:
+                redirect_to = success_url
+            else:
+                redirect_to = reverse('baph_email_change_complete')
             return redirect(redirect_to)
 
     if not extra_context: extra_context = dict()
     extra_context['form'] = form
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 @secure_required
 def password_change(request, template_name='registration/password_form.html',
@@ -386,8 +372,7 @@ def password_change(request, template_name='registration/password_form.html',
 
     if not extra_context: extra_context = dict()
     extra_context['form'] = form
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 @secure_required
 def email_confirm(request, confirmation_key,
@@ -421,7 +406,7 @@ def email_confirm(request, confirmation_key,
         ``template_name``.
 
     """
-    user = SignupManager.confirm_email(confirmation_key)
+    user = SignupManager.objects.confirm_email(confirmation_key)
     if user:
         messages.success(request, _('Your email address has been changed.'),
                          fail_silently=True)
@@ -432,6 +417,4 @@ def email_confirm(request, confirmation_key,
         return redirect(redirect_to)
     else:
         if not extra_context: extra_context = dict()
-        return render_to_response(template_name, extra_context,
-            context_instance=RequestContext(request))
-
+        return render(reqeust, template_name, extra_context)

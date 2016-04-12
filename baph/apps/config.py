@@ -1,3 +1,4 @@
+'''
 from importlib import import_module
 import os
 
@@ -204,3 +205,4 @@ class AppConfig(object):
         """
         Override this method in subclasses to run code when Django starts.
         """
+'''

@@ -6,6 +6,7 @@ from django.core.exceptions import (NON_FIELD_ERRORS, FieldError,
     ImproperlyConfigured, ValidationError)
 from django.db.models import fields as modelfields
 from django.forms.forms import BaseForm, DeclarativeFieldsMetaclass
+from django.forms.models import construct_instance, model_to_dict, fields_for_model
 from django.forms.utils import ErrorList
 from django.utils import six
 from sqlalchemy import *
@@ -14,7 +15,6 @@ from sqlalchemy.orm.attributes import instance_dict
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 from sqlalchemy.sql.expression import _BinaryExpression, _Label
 
-#from baph.contrib.custom_fields.models import CustomField
 from baph.db import types
 from baph.db.models.base import Model as Base
 from baph.forms import fields
@@ -22,29 +22,7 @@ from baph.forms.widgets import ObjectSelect, MultiObjectSelect
 
 
 ALL_FIELDS = '__all__'
-
-FIELD_MAP = {
-    String:         forms.CharField,
-    Text:           forms.CharField,
-    Unicode:        forms.CharField,
-    UnicodeText:    forms.CharField,
-    Integer:        forms.IntegerField,
-    Float:          forms.FloatField,
-    DateTime:       forms.DateTimeField,
-    Date:           forms.DateField,
-    Time:           forms.TimeField,
-    Boolean:        forms.BooleanField,
-    types.Json:     fields.JsonField,
-    types.List:     fields.ListField,
-    types.Dict:     fields.DictField,
-    'collection':   fields.MultiObjectField,
-    #'object':       fields.ObjectField,
-    'object':       fields.ModelChoiceField,
-    }
-
-#orm = ORM.get()
-#Base = orm.Base
-
+'''
 def construct_instance(form, instance, fields=None, exclude=None):
     """
     Constructs and returns a model instance from the bound ``form``'s
@@ -84,30 +62,23 @@ def construct_instance(form, instance, fields=None, exclude=None):
         f.save_form_data(instance, cleaned_data[f.name])
 
     return instance
-
-
+'''
+'''
 def model_to_dict(instance, fields=None, exclude=None):
     opts = instance._meta
     data = instance_dict(instance).copy()
     for f in opts.fields:
-        if issubclass(f.data_type, orm.Base):
-            # skip relations
-            pass
-
         if not getattr(f, 'editable', False):
             continue
         if fields and not f.name in fields:
             continue
         if exclude and f.name in exclude:
             continue
-        try:
-            data[f.name] = f.value_from_object(instance)
-        except:
-            raise
-            pass
+        data[f.name] = f.value_from_object(instance)
 
     return data
-
+'''
+'''
 def fields_for_model(model, fields=None, exclude=None, widgets=None, 
                      formfield_callback=None, localized_fields=None,
                      labels=None, help_texts=None, error_messages=None,
@@ -116,6 +87,7 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
     field_list = []
     ignored = []
     opts = model._meta
+
 
     # pull labels from the model, then update with local values
     form_labels = opts.labels or {}
@@ -154,35 +126,6 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
         if field_classes and f.name in field_classes:
             kwargs['form_class'] = field_classes[f.name]
         
-        '''
-        elif f.collection_class:
-            kwargs['form_class'] = FIELD_MAP['collection']
-        elif issubclass(f.data_type, Base):
-            manager = f.data_type.objects
-            session = orm.sessionmaker()
-            kwargs['form_class'] = FIELD_MAP['object']
-            kwargs['queryset'] = session.query(f.data_type)
-            #kwargs['to_field_name']
-            #kwargs['limit_choices_to']
-        else:
-            kwargs['form_class'] = FIELD_MAP.get(f.data_type)
-
-        if f.collection_class:
-            kwargs['collection_class'] = f.collection_class            
-            if issubclass(f.data_type, Base):
-                kwargs['related_class'] = f.data_type
-            if f.collection_class == [list]:
-                if not kwargs.get('widget', True):
-                    kwargs['widget'] = MultiObjectSelect(model=f.data_type)
-
-        if f.nullable or f.blank:
-            kwargs['required'] = False
-        if f.max_length and 'collection_class' not in kwargs:
-            kwargs['max_length'] = f.max_length
-
-        #if issubclass(f.data_type, Base):
-        #    assert False
-        '''
         if formfield_callback is None:
             formfield = f.formfield(**kwargs)
         elif not callable(formfield_callback):
@@ -204,7 +147,7 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
                 and (f not in ignored)]
         )
     return field_dict
-
+'''
 class ModelFormOptions(object):
     def __init__(self, options=None):
         self.model = getattr(options, 'model', None)
@@ -250,8 +193,7 @@ class ModelFormMetaclass(DeclarativeFieldsMetaclass):
             fields = fields_for_model(opts.model, opts.fields, opts.exclude,
                                       opts.widgets, formfield_callback,
                                       opts.localized_fields, opts.labels,
-                                      opts.help_texts, opts.error_messages,
-                                      opts.field_classes)
+                                      opts.help_texts, opts.error_messages)
 
             # make sure opts.fields doesn't specify an invalid field
             none_model_fields = [k for k, v in six.iteritems(fields) if not v]
@@ -320,7 +262,7 @@ class BaseModelForm(BaseForm):
         excluded from model validation. See the following tickets for
         details: #12507, #12521, #12553
         """
-        #print 'get validation exclusion:'
+        print 'get validation exclusion:'
         exclude = []
         # Build up a list of fields that should be excluded from model field
         # validation and unique checks.
@@ -329,23 +271,23 @@ class BaseModelForm(BaseForm):
             # Exclude fields that aren't on the form. The developer may be
             # adding these values to the model after form validation.
             if field not in self.fields:
-                #print '    excluding field not in fields: "%s"' % field
+                print '    excluding field not in fields: "%s"' % field
                 exclude.append(f.name)
 
             # Don't perform model validation on fields that were defined
             # manually on the form and excluded via the ModelForm's Meta
             # class. See #12901.
             elif self._meta.fields and field not in self._meta.fields:
-                #print '    excluding field in exclude "%s"' % field
+                print '    excluding field in exclude "%s"' % field
                 exclude.append(f.name)
             elif self._meta.exclude and field in self._meta.exclude:
-                #print '    excluding field in form.exclude: "%s"' % field
+                print '    excluding field in form.exclude: "%s"' % field
                 exclude.append(f.name)
 
             # Exclude fields that failed form validation. There's no need for
             # the model fields to validate them as well.
             elif field in self._errors.keys():
-                #print '    excluding field due to validation failure: %s' % field
+                print '    excluding field due to validation failure: %s' % field
                 exclude.append(f.name)
 
             # Exclude empty fields that are not required by the form, if the
@@ -359,12 +301,12 @@ class BaseModelForm(BaseForm):
                 field_value = self.cleaned_data.get(field)
                 if not f.blank and not form_field.required \
                         and field_value in form_field.empty_values:
-                    #print '    excluding non-required empty field: %s' % field
+                    print '    excluding non-required empty field: %s' % field
                     exclude.append(f.name)
         return exclude
 
     def clean(self):
-        #print 'form.clean'
+        print 'form.clean'
         self._validate_unique = True
         return self.cleaned_data
 
@@ -397,7 +339,7 @@ class BaseModelForm(BaseForm):
         self.add_error(None, errors)
 
     def _post_clean(self):
-        #print '_post_clean'
+        print '_post_clean'
         opts = self._meta
 
         exclude = self._get_validation_exclusions()
@@ -407,7 +349,7 @@ class BaseModelForm(BaseForm):
                                                opts.fields, exclude)
         except ValidationError as e:
             self._update_errors(e)
-
+        print self.instance.to_dict()
         try:
             self.instance.full_clean(exclude=exclude, validate_unique=False)
         except ValidationError as e:
@@ -419,6 +361,7 @@ class BaseModelForm(BaseForm):
 
 
     def save(self, commit=True):
+
         if self.errors:
             raise ValueError(
                 "The %s could not be %s because the data didn't validate." % (

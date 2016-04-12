@@ -190,3 +190,11 @@ class PhoneNumber(types.TypeDecorator):
 
 class URL(types.TypeDecorator):
     impl = types.String
+
+class Image(types.TypeDecorator):
+    impl = types.Unicode
+
+    def __init__(self, *args, **kwargs):
+        self.upload_to = kwargs.pop('upload_to', '')
+        self.storage = kwargs.pop('storage', None)
+        super(Image, self).__init__(*args, **kwargs)

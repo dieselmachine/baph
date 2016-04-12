@@ -4,7 +4,13 @@ from importlib import import_module
 import sys
 import warnings
 
+from django.apps import apps
+from django.apps.config import MODELS_MODULE_NAME
 from django.conf import settings
+from django.core.exceptions import (
+    ObjectDoesNotExist, MultipleObjectsReturned)
+from django.db import connections, router
+from django.db.models.base import subclass_exception
 from django.forms import ValidationError
 from django.utils.deprecation import RemovedInDjango19Warning
 from sqlalchemy import event, inspect
@@ -21,8 +27,7 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.orm.util import has_identity, identity_key
 from sqlalchemy.schema import ForeignKeyConstraint
 
-from baph.apps import apps
-from baph.apps.config import MODELS_MODULE_NAME
+
 from baph.db.models import signals
 from baph.db.models.manager import ensure_default_manager
 from baph.db.models.mixins import CacheMixin, ModelPermissionMixin, GlobalMixin
@@ -91,13 +96,41 @@ def constructor(self, ignore_unknown_kwargs=False, **kwargs):
                 (k, cls.__name__))
         setattr(self, k, kwargs[k])
 
+class ModelState(object):
+    """
+    A class for storing instance state
+    """
+    def __init__(self, db=None, instance=None):
+        self.db = db
+        self.instance = instance
+
+    @property
+    def adding(self):
+        return not has_identity(self.instance)
+
 
 class BaseModel(CacheMixin, ModelPermissionMixin, GlobalMixin):
-
+    _deferred = False
+    
     def __init__(self, *args, **kwargs):
         signals.pre_init.send(sender=self.__class__, args=args, kwargs=kwargs)
+
         super(BaseModel, self).__init__(self, *args, **kwargs)
         signals.post_init.send(sender=self.__class__, instance=self)
+
+    def _get_pk_val(self, meta=None):
+        if not meta:
+            meta = self._meta
+        return getattr(self, meta.pk.attname)
+
+    def _set_pk_val(self, value):
+        return setattr(self, self._meta.pk.attname, value)
+
+    pk = property(_get_pk_val, _set_pk_val)
+
+    @property
+    def _state(self):
+        return ModelState(instance=self)
 
     @classmethod
     def get_fields(cls, owner_id=None):
@@ -125,18 +158,14 @@ class BaseModel(CacheMixin, ModelPermissionMixin, GlobalMixin):
     @classmethod
     def get_custom_fields(cls, owner_id):
         from baph.contrib.custom_fields.models import CustomField
-        from baph.db.orm import ORM
-        orm = ORM.get()
         if not cls._meta.extension_field:
             return
-            raise Exception('extension_field must be defined')
-        session = orm.sessionmaker()
-        custom_fields = session.query(CustomField) \
+        custom_fields = CustomField.objects \
             .filter_by(owner_id=owner_id) \
             .filter_by(model=cls._meta.object_name) \
             .all()
         for field in custom_fields:
-            yield field.as_modelfield()
+            yield field.as_modelfield(cls)
 
     @classmethod
     def list_actions(cls, user, ns):
@@ -161,11 +190,11 @@ class BaseModel(CacheMixin, ModelPermissionMixin, GlobalMixin):
                 obj_name = self._meta.object_name
             if user.has_obj_perm(obj_name, action, self):
                 yield (label, view, args)
-
+    '''
     @classmethod
     def create(cls, *args, **kwargs):
         return cls(*args, **kwargs)
-
+    '''
     @classmethod
     def get_form_class(cls, *args, **kwargs):
         if not cls._meta.form_class:
@@ -183,6 +212,7 @@ class BaseModel(CacheMixin, ModelPermissionMixin, GlobalMixin):
                     for col in mapper.primary_key]
         values = mapper.primary_key_from_instance(self)
         return dict(zip(keys, values))
+
 
     def update(self, data):
         for key, value in data.iteritems():
@@ -222,6 +252,22 @@ class BaseModel(CacheMixin, ModelPermissionMixin, GlobalMixin):
     def is_deleted(self):
         return False
 
+    def serializable_value(self, field_name):
+        """
+        Returns the value of the field name for this instance. If the field is
+        a foreign key, returns the id value, instead of the object. If there's
+        no Field object with this name on the model, the model attribute's
+        value is returned directly.
+        Used to serialize a field's value (in the serializer, or form output,
+        for example). Normally, you would just access the attribute directly
+        and not use this method.
+        """
+        try:
+            field = self._meta.get_field(field_name)
+        except FieldDoesNotExist:
+            return getattr(self, field_name)
+        return getattr(self, field.attname)
+
     def save(self, commit=False, force_insert=False, force_update=False,
              using=None, update_fields=None):
         """
@@ -231,7 +277,7 @@ class BaseModel(CacheMixin, ModelPermissionMixin, GlobalMixin):
         that the "save" must be an SQL insert or update (or equivalent for
         non-SQL backends), respectively. Normally, they should not be set.
         """
-        #using = using or router.db_for_write(self.__class__, instance=self)
+        using = using or router.db_for_write(self.__class__, instance=self)
 
         if update_fields is not None:
             # If update_fields is empty, skip the save. We do also check for
@@ -240,22 +286,22 @@ class BaseModel(CacheMixin, ModelPermissionMixin, GlobalMixin):
             if len(update_fields) == 0:
                 return
 
-        update_fields = frozenset(update_fields)
-        field_names = set()
+            update_fields = frozenset(update_fields)
+            field_names = set()
 
-        for field in self._meta.fields:
-            if not field.primary_key:
-                field_names.add(field.name)
+            for field in self._meta.fields:
+                if not field.primary_key:
+                    field_names.add(field.name)
 
-                if field.name != field.attname:
-                    field_names.add(field.attname)
+                    if field.name != field.attname:
+                        field_names.add(field.attname)
 
-        non_model_fields = update_fields.difference(field_names)
+            non_model_fields = update_fields.difference(field_names)
 
-        if non_model_fields:
-            raise ValueError("The following fields do not exist in this "
-                             "model or are m2m fields: %s"
-                             % ', '.join(non_model_fields))
+            if non_model_fields:
+                raise ValueError("The following fields do not exist in this "
+                                 "model or are m2m fields: %s"
+                                 % ', '.join(non_model_fields))
 
         self.save_base(using=using, force_insert=force_insert,
                        force_update=force_update, update_fields=update_fields)
@@ -279,26 +325,25 @@ class BaseModel(CacheMixin, ModelPermissionMixin, GlobalMixin):
         #if cls._meta.proxy:
         #    cls = cls._meta.concrete_model
         meta = cls._meta
-        #if not meta.auto_created:
-        #    signals.pre_save.send(sender=origin, instance=self, raw=raw, using=using,
-        #                          update_fields=update_fields)
+        if not meta.auto_created:
+            signals.pre_save.send(sender=origin, instance=self, raw=raw, using=using,
+                                  update_fields=update_fields)
         #with transaction.atomic(using=using, savepoint=False):
         #    if not raw:
         #        self._save_parents(cls, using, update_fields)
         #    updated = self._save_table(raw, cls, force_insert, force_update, using, update_fields)
         # Store the database on which the object was saved
-        #self._state.db = using
+        self._state.db = using
         # Once saved, this is no longer a to-be-added instance.
         #self._state.adding = False
+        #updated = has_identity(self)
+        updated = self._save_table(raw, cls, force_insert, force_update, using,
+                                   update_fields)
 
-        from baph.db.orm import ORM
-        orm = ORM.get()
-        session = orm.sessionmaker()
-
-        if commit:
-            if not self in session:
-                session.add(self)
-            session.commit()
+        session = connections[using].session()
+        session.add(self)
+        session.commit()
+        self.kill_cache()
 
         # Signal that the save is complete
         if not meta.auto_created:
@@ -308,7 +353,90 @@ class BaseModel(CacheMixin, ModelPermissionMixin, GlobalMixin):
                                    raw=raw, using=using)
 
     save_base.alters_data = True
+    from sqlalchemy.orm.base import instance_state, instance_dict
+    def _save_table(self, raw=False, cls=None, force_insert=False,
+                    force_update=False, using=None, update_fields=None):
+        """
+        Does the heavy-lifting involved in saving. Updates or inserts the data
+        for a single table.
+        """
+        meta = cls._meta
+        non_pks = [f for f in meta.local_concrete_fields if not f.primary_key]
 
+        if update_fields:
+            non_pks = [f for f in non_pks
+                       if f.name in update_fields or f.attname in update_fields]
+
+        pk_val = self._get_pk_val(meta)
+        if pk_val is None:
+            pk_val = meta.pk.get_pk_value_on_save(self)
+            setattr(self, meta.pk.attname, pk_val)
+        pk_set = pk_val is not None
+        if not pk_set and (force_update or update_fields):
+            raise ValueError("Cannot force an update in save() with no primary key.")
+        updated = False
+        # If possible, try an UPDATE. If that doesn't update anything, do an INSERT.
+
+        if pk_set and not force_insert:
+            #base_qs = cls._base_manager.using(using)
+            values = [(f, None, (getattr(self, f.attname) if raw 
+                        else f.pre_save(self, False))) for f in non_pks]
+            for field, cls_, v in values:
+                value = field.get_prep_value(v)
+                desc = getattr(cls, field.attname)
+                desc.impl.set(instance_state(self),
+                              instance_dict(self), value, None)
+                #assert False
+                #print (field, field.attname, v)
+                #setattr(self, field.attname, value)
+                #print (getattr(self, field.attname),)
+                #print 'pre dict'
+                #print (self.__dict__[field.attname],)
+                #print 'post dict'
+            updated = True
+
+            '''
+            assert False
+            forced_update = update_fields or force_update
+            updated = self._do_update(base_qs, using, pk_val, values, update_fields,
+                                      forced_update)
+            if force_update and not updated:
+                raise DatabaseError("Forced update did not affect any rows.")
+            if update_fields and not updated:
+                raise DatabaseError("Save with update_fields did not affect any rows.")
+            '''
+        if not updated:
+            if meta.order_with_respect_to:
+                # If this is a model with an order_with_respect_to
+                # autopopulate the _order field
+                field = meta.order_with_respect_to
+                filter_args = field.get_filter_kwargs_for_object(self)
+                order_value = cls._base_manager.using(using) \
+                    .filter(**filter_args).count()
+                self._order = order_value
+            '''
+            fields = meta.local_concrete_fields
+            if not pk_set:
+                fields = [f for f in fields if not isinstance(f, AutoField)]
+
+            update_pk = bool(meta.has_auto_field and not pk_set)
+            result = self._do_insert(cls._base_manager, using, fields, update_pk, raw)
+            if update_pk:
+                setattr(self, meta.pk.attname, result)
+            '''
+        d = self.__dict__['logo_image']
+        #assert False
+        print 'dict before save:'
+        print self.__dict__
+        for k in  dir(instance_state(self)):
+            print '  ', k, getattr(instance_state(self), k)
+        print instance_dict(self)
+        session = connections[using].session()
+        session.add(self)
+        session.commit()
+        print 'session complete'
+        print instance_dict(self)
+        return updated
 
     def _get_next_or_previous_by_FIELD(self, field, is_next, **kwargs):
         print 'get next or previous:', (self, field, is_next, kwargs)
@@ -456,6 +584,27 @@ class ModelBase(type):
                 app_label = app_config.label
 
         new_class.add_to_class('_meta', Options(meta, app_label=app_label))
+        new_class.add_to_class(
+            'DoesNotExist',
+            subclass_exception(
+                str('DoesNotExist'),
+                tuple(
+                    x.DoesNotExist for x in parents if hasattr(x, '_meta') 
+                    and not x._meta.abstract
+                ) or (ObjectDoesNotExist,),
+                module,
+                attached_to=new_class))
+        new_class.add_to_class(
+            'MultipleObjectsReturned',
+            subclass_exception(
+                str('MultipleObjectsReturned'),
+                tuple(
+                    x.MultipleObjectsReturned for x in parents 
+                    if hasattr(x, '_meta') and not x._meta.abstract
+                ) or (MultipleObjectsReturned,),
+                module,
+                attached_to=new_class))
+
         if base_meta:
             # Non-abstract child classes inherit some attributes from their
             # non-abstract parent (unless an ABC comes before it in the
@@ -500,7 +649,13 @@ class ModelBase(type):
     
     def __setattr__(cls, key, value):
         try:
-            junk = value.__module__.startswith('django.db.models.fields.related')
+            isfile = value.__module__.startswith('django.db.models.fields.files')
+        except:
+            isfile = False
+        if isfile:
+            pass
+        try:
+            junk = value.__module__.startswith('django.db.models.fields')
         except:
             junk = False
         if not junk:
@@ -590,6 +745,16 @@ def get_declarative_base(**kwargs):
         **kwargs)
 
 Base = Model = get_declarative_base()
+
+'''
+from sqlalchemy import event
+
+@event.listens_for(Base, 'attribute_instrument')
+def receive_attribute_instrument(cls, key, inst):
+    "listen for the 'attribute_instrument' event"
+    print cls, (key, inst)
+    assert False
+'''
 
 if getattr(settings, 'CACHE_ENABLED', False):
     @event.listens_for(mapper, 'after_insert')

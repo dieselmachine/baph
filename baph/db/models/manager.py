@@ -1,6 +1,7 @@
 from django.db import connections
 from django.db.models import manager
-from sqlalchemy.orm import query
+
+from baph.db.models.query import Query
 
 
 def ensure_default_manager(cls):
@@ -41,25 +42,8 @@ def ensure_default_manager(cls):
                 "model and model manager setup."
             )
 
-class Query(query.Query):
-
-    def __init__(self, entities, session=None, query=None, using=None, hints=None):
-        if hints:
-            print 'ignoring hints:', hints
-        if query:
-            print 'ignoring query:', query
-
-        if using:
-            session = connections[alias].session()
-        return super(Query, self).__init__(entities, session)
-
-    def using(self, alias):
-        self.session = connections[alias or 'default'].session()
-        return self
-
 class Manager(manager.BaseManager.from_queryset(Query)):
 
     def get_queryset(self):
-        print 'get queryset'
         session = connections[self.db or 'default'].session()
         return self._queryset_class(self.model, session=session)

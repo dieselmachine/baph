@@ -12,7 +12,7 @@ class MultiSQLAlchemyBackend(object):
     
     def authenticate(self, identification, password=None, check_password=True):
         print 'auth'
-        session = orm.sessionmaker()
+        #session = orm.sessionmaker()
         org_key = Organization.resource_name.lower() + '_id'
         user = None
         try:
@@ -21,7 +21,7 @@ class MultiSQLAlchemyBackend(object):
             filters = {'email': identification}
             if auth_settings.BAPH_AUTH_UNIQUE_WITHIN_ORG:
                 filters[org_key] = Organization.get_current_id()
-            user = session.query(User).filter_by(**filters).first()
+            user = User.objects.filter_by(**filters).first()
         except django.core.validators.ValidationError:
             # this wasn't an email
             pass
@@ -33,7 +33,7 @@ class MultiSQLAlchemyBackend(object):
             filters = {User.USERNAME_FIELD: identification}
             if auth_settings.BAPH_AUTH_UNIQUE_WITHIN_ORG:
                 filters[org_key] = Organization.get_current_id()
-            user = session.query(User).filter_by(**filters).first()
+            user = User.objects.filter_by(**filters).first()
         if not user:
             return None
         if check_password:
@@ -53,7 +53,6 @@ class MultiSQLAlchemyBackend2(object):
     
     def authenticate(self, identification, password=None, check_password=True):
         print 'auth called'
-        session = orm.sessionmaker()
         org_key = Organization.resource_name.lower() + '_id'
         user = None
         try:
@@ -61,7 +60,7 @@ class MultiSQLAlchemyBackend2(object):
             django.core.validators.validate_email(identification)
             filters = {'email': identification}
             auth_cls = getattr(User, 'AUTH_CLASS', User)
-            auth = session.query(auth_cls).filter_by(**filters).first()
+            auth = auth_cls.objects.filter_by(**filters).first()
             print 'found user:', (auth,)
         except django.core.validators.ValidationError:
             # this wasn't an email
@@ -75,7 +74,7 @@ class MultiSQLAlchemyBackend2(object):
             filters = {auth_cls.USERNAME_FIELD: identification}
             if auth_settings.BAPH_AUTH_UNIQUE_WITHIN_ORG:
                 filters[org_key] = Organization.get_current_id()
-            auth = session.query(auth_cls).filter_by(**filters).first()
+            auth = auth_cls.objects.filter_by(**filters).first()
 
         if not auth:
             # username lookup failed, no user found

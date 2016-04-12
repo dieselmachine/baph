@@ -4,7 +4,8 @@ import time
 import types
 
 from django.conf import settings
-from django.core.cache import get_cache
+from django.core.cache import caches
+from django.db import connections
 from sqlalchemy import Column, DateTime, func, inspect
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.ext.declarative.clsregistry import _class_resolver
@@ -13,7 +14,6 @@ from sqlalchemy.orm.attributes import get_history, instance_dict
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 from sqlalchemy.orm.util import has_identity, identity_key
 
-from baph.db import ORM
 from .utils import column_to_attr, class_resolver
 
 
@@ -92,7 +92,7 @@ class CacheMixin(object):
         Returns the cache associated with this model, based on the value
         of meta.cache_alias
         """
-        return get_cache(cls._meta.cache_alias)
+        return caches[cls._meta.cache_alias]
 
     @classmethod
     def get_cache_namespaces(cls, instance=None):
@@ -230,8 +230,7 @@ class CacheMixin(object):
             ]):
             return cache_keys, version_keys
 
-        orm = ORM.get()
-        session = orm.sessionmaker()
+        session = connections['default'].session()
         deleted = self.is_deleted or self in session.deleted
         data = instance_dict(self)
         cache = self.get_cache()

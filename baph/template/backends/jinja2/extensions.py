@@ -1,68 +1,24 @@
-#encoding: utf-8
-from __future__ import absolute_import
-import sys
-
 from django.core.urlresolvers import reverse
-from django.template import TemplateDoesNotExist, TemplateSyntaxError
-from django.template.backends import jinja2 as jinja2backend
-from django.template.base import TemplateSyntaxError, Token
-from django.template.context import _builtin_context_processors, make_context
-from django.utils import six
-from django.utils.functional import cached_property
-from django.utils.module_loading import import_string
+from django.template.backends.utils import csrf_input
 import jinja2
 from jinja2.ext import Extension
 
 
-class Jinja2(jinja2backend.Jinja2):
-    
-    app_dirname = 'templates'
-    
-    def from_string(self, template_code):
-        return Template(self.env.from_string(template_code), self.env)
+class CSRFExtension(Extension):
+    tags = set(['csrf_token'])
 
-    def get_template(self, template_name):
-        try:
-            template = self.env.get_template(template_name)
-            return Template(template, self.env)
-        except jinja2.TemplateNotFound as exc:
-            six.reraise(TemplateDoesNotExist, TemplateDoesNotExist(exc.args),
-                        sys.exc_info()[2])
-        except jinja2.TemplateSyntaxError as exc:
-            six.reraise(TemplateSyntaxError, TemplateSyntaxError(exc.args),
-                        sys.exc_info()[2])
+    def _csrf_input(self, request):
+        return csrf_input(request)
 
-class JinjaEnvironment(jinja2.Environment):
-    def __init__(self, *args, **kwargs):
-        self.context_processors = kwargs.pop('context_processors', [])
-        super(JinjaEnvironment, self).__init__(*args, **kwargs)
-
-    @cached_property
-    def template_context_processors(self):
-        context_processors = _builtin_context_processors
-        context_processors += tuple(self.context_processors)
-        return tuple(import_string(path) for path in context_processors)
-
-
-class Template(jinja2backend.Template):
-    def __init__(self, template, engine):
-        super(Template, self).__init__(template)
-        self.name = template.filename
-        self.engine = engine
-
-    def render(self, context=None, request=None):
-        context = make_context(context, request)
-        context.render_context.push()
-        try:
-            if context.template is None:
-                with context.bind_template(self):
-                    context.template_name = self.name
-                    return self.template.render(context.flatten())
-            else:
-                return self.template.render(context.flatten())
-        finally:
-            context.render_context.pop()
+    def parse(self, parser):
+        lineno = next(parser.stream).lineno
         
+        return jinja2.nodes.Output([
+            self.call_method('_csrf_input', args=[
+                jinja2.nodes.Name('request', 'load'),
+                ])
+            ]).set_lineno(lineno)
+
 class URLExtension(Extension):
     tags = set(['url'])
 
@@ -95,6 +51,9 @@ class URLExtension(Extension):
                     next(parser.stream)
                     asvar = jinja2.nodes.Name(parser.stream.expect('name').value,
                             'store')
+                    continue
+                if parser.stream.look().type == 'block_end':
+                    args.append(parser.parse_expression())
                     continue
                 raise Exception()
             elif parser.stream.current.type != 'string':

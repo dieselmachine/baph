@@ -1,3 +1,4 @@
+'''
 from collections import Counter, defaultdict, OrderedDict
 import os
 import sys
@@ -412,3 +413,4 @@ class Apps(registry.Apps):
         self.clear_cache()
 
 apps = Apps(installed_apps=None)
+'''

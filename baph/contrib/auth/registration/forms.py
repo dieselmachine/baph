@@ -204,11 +204,10 @@ class ChangeEmailForm(forms.Form):
 
     def __init__(self, user, *args, **kwargs):
         """
-        The current ``user`` is needed for initialisation of this form so
+        The current ``user`` is needed for initialization of this form so
         that we can check if the email address is still free and not always
         returning ``True`` for this query because it's the users own e-mail
         address.
-
         """
         super(ChangeEmailForm, self).__init__(*args, **kwargs)
         if not isinstance(user, User):
@@ -226,11 +225,9 @@ class ChangeEmailForm(forms.Form):
             org_key = Organization._meta.model_name + '_id'
             filters[org_key] = Organization.get_current_id()
 
-        session = orm.sessionmaker()
-        user = session.query(User) \
-            .filter(User.email != self.user.email) \
-            .filter_by(**filters) \
-            .first()
+        user = User.objects.filter(User.email != self.user.email) \
+                           .filter_by(**filters) \
+                           .first()
         if user:
             raise forms.ValidationError(_(u'This email is already in use. '
                 'Please supply a different email.'))
@@ -247,8 +244,6 @@ class ChangeEmailForm(forms.Form):
         signup = auth.signup
         if not signup:
             signup = UserRegistration(user_id=auth.id)
-            session = orm.sessionmaker()
-            session.add(signup)
-            session.commit()
+            signup.save()
         return signup.change_email(self.cleaned_data['email'])    
 

@@ -3,7 +3,7 @@ import inspect
 import re
 from uuid import UUID
 
-from django.shortcuts import render_to_response
+from django.shortcuts import render_to_response, render
 from django.template import RequestContext
 from django.conf import settings
 from django.contrib.auth import REDIRECT_FIELD_NAME
@@ -25,7 +25,7 @@ from . import login as auth_login, logout as auth_logout
 from .forms import PasswordResetForm, SetPasswordForm
 from .models import User
 
-
+'''
 def password_reset_done(request,
                         template_name='registration/password_reset_done.html',
                         current_app=None, extra_context=None):
@@ -35,8 +35,7 @@ def password_reset_done(request,
     if extra_context is not None:
         context.update(extra_context)
 
-    return render_to_response(template_name, context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, context)
 
 def password_reset_complete(request,
                             template_name='registration/password_reset_complete.html',
@@ -48,9 +47,8 @@ def password_reset_complete(request,
     if extra_context is not None:
         context.update(extra_context)
 
-    return render_to_response(template_name, context,
-        context_instance=RequestContext(request))
-
+    return render(request, template_name, context)
+'''
 @csrf_protect
 @never_cache
 def login(request, template_name='registration/login.html',
@@ -87,11 +85,10 @@ def login(request, template_name='registration/login.html',
 
     request.session.set_test_cookie()
 
-    return render_to_response(template_name, {
+    return render(request, template_name, {
         'form': form,
         redirect_field_name: redirect_to,
-    }, context_instance=RequestContext(request))
-
+        })
 
 def logout(request, next_page=None,
            template_name='registration/logged_out.html',
@@ -122,10 +119,10 @@ def logout(request, next_page=None,
             next_page = 'http://%s%s' % (redirect_host, next_page)
         return HttpResponseRedirect(next_page)
 
-    return render_to_response(template_name, {
+    return render(request, template_name, {
         'title': _('Logged out'),
-    }, context_instance=RequestContext(request))
-
+        })
+'''
 @csrf_protect
 def password_reset(request, is_admin_site=False,
                    template_name='registration/password_reset_form.html',
@@ -156,10 +153,10 @@ def password_reset(request, is_admin_site=False,
             return HttpResponseRedirect(post_reset_redirect)
     else:
         form = password_reset_form()
-    return render_to_response(template_name, {
+    return render(request, template_name, {
         'form': form,
-    }, context_instance=RequestContext(request))
-
+        })
+'''
 @sensitive_post_parameters()
 @never_cache
 def password_reset_confirm(request, uidb36=None, token=None,
@@ -184,8 +181,6 @@ def password_reset_confirm(request, uidb36=None, token=None,
     except (TypeError, ValueError, OverflowError):
         user = None
 
-    context_instance = RequestContext(request)
-
     if token_generator.check_token(user, token):
         validlink = True
         title = _('Enter new password')
@@ -209,5 +204,4 @@ def password_reset_confirm(request, uidb36=None, token=None,
     if extra_context is not None:
         context.update(extra_context)
 
-    return render_to_response(template_name, context,
-                              context_instance=RequestContext(request))
+    return render(request, template_name, context)

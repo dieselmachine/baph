@@ -1,8 +1,4 @@
-try:
-    from django.conf.urls import *
-except:
-    from django.conf.urls import *
-    
+from django.conf.urls import *
 from django.contrib.auth import views as auth_views
 
 from baph.contrib.auth.registration import settings
@@ -43,27 +39,7 @@ urlpatterns = patterns('',
        {'template_name': 'registration/password_complete.html'},
        name='baph_password_change_complete'),
 
-    # Password reset
-    url(r'^password/reset/$',
-       'baph.contrib.auth.views.password_reset',
-       {'template_name': 'registration/password_reset_form.html',
-        'email_template_name': 'registration/emails/password_reset_message.txt'},
-       name='baph_password_reset'),
-    url(r'^password/reset/confirm/(?P<uidb36>[0-9A-Za-z]+)-(?P<token>.+)/$',
-       'baph.contrib.auth.views.password_reset_confirm',
-       {'template_name': 'registration/password_reset_confirm_form.html',
-        'post_reset_redirect': 'baph_password_reset_complete',
-       },
-       name='baph_password_reset_confirm'),
-    url(r'^password/reset/done/$',
-       'baph.contrib.auth.views.password_reset_done',
-       {'template_name': 'registration/password_reset_done.html'},
-       name='baph_password_reset_done'),
-    url(r'^password/reset/confirm/complete/$',
-       'baph.contrib.auth.views.password_reset_complete',
-       {'template_name': 'registration/password_reset_complete.html'},
-        name='baph_password_reset_complete'),
-
+    
     # Disabled account
     url(r'^disabled/$',
        'baph.contrib.auth.registration.views.direct_to_template',

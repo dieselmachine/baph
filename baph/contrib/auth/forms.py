@@ -11,10 +11,7 @@ from django.utils.http import int_to_base36
 from django.utils.translation import ugettext_lazy as _
 
 from baph.contrib.auth.models import User, Organization #UNUSABLE_PASSWORD
-#from baph.db.orm import ORM
 
-
-#orm = ORM.get()
 
 class PasswordResetForm(forms.Form):
     email = forms.EmailField(label=_('E-mail'), max_length=75)
@@ -26,8 +23,12 @@ class PasswordResetForm(forms.Form):
         else:
             cls = User
         email = self.cleaned_data['email']
+
+        users = cls.objects.filter_by(email=email).all()
+        '''
         session = orm.sessionmaker()
         users = session.query(cls).filter_by(email=email).all()
+        '''
         if len(users) == 0:
             raise forms.ValidationError(_(u'''\
 That e-mail address doesn't have an associated user account. Are you sure
@@ -64,7 +65,7 @@ That e-mail address doesn't allow the password to be set.'''))
             else:
                 site_name = domain = domain_override
 
-            c = {
+            context = {
                 'email': user.email,
                 'domain': domain,
                 'site_name': site_name,
@@ -73,16 +74,17 @@ That e-mail address doesn't allow the password to be set.'''))
                 'token': token_generator.make_token(user),
                 'protocol': use_https and 'https' or 'http',
             }
-            subject = render_to_string(subject_template_name, \
-                                       RequestContext(request, c))
+            subject = render_to_string(subject_template_name, context,
+                                       request=request)
             subject = ''.join(subject.splitlines())
-            email = render_to_string(email_template_name, \
-                                     RequestContext(request, c))
+            email = render_to_string(email_template_name, context,
+                                     request=request)
             send_mail(subject, email, from_email, [user.email])
 
 class SetPasswordForm(BaseSetPasswordForm):
     '''A form that lets a user change set his/her password without entering
     the old password.
+    '''
     '''
     error_messages = {
         'password_mismatch': _("The two password fields didn't match."),
@@ -99,7 +101,8 @@ class SetPasswordForm(BaseSetPasswordForm):
         if commit:
             self.session.commit()
         return self.user
-        
+    '''
+    pass
 class PasswordChangeForm(SetPasswordForm):
     error_messages = dict(SetPasswordForm.error_messages, **{
         'password_incorrect': _("Your old password was entered incorrectly. "

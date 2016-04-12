@@ -245,13 +245,23 @@ def safe_import(path, replace_modules=[]):
     exec code in sys.modules[mod].__dict__
     return getattr(sys.modules[mod], name)    
 
+def unregister_model(app_label, model):
+    from baph.apps import apps
+    model_name = model._meta.model_name
+    app_models = apps.all_models[app_label]
+    if model_name not in app_models:
+        raise RuntimeError(
+            "model '%s' not found in application '%s'" %
+            (model_name, app_label))
+    del app_models[model_name]
+    apps.clear_cache()
+
 def remove_class(cls, name):
     subs = cls.__subclasses__()
     subs = [s for s in subs if s.__module__ != cls.__module__]
     if not subs:
         # unregister from AppCache
-        cls._meta.apps.unregister_model(cls._meta.app_label, cls)
-        #unregister_models(cls._meta.app_label, cls._meta.model_name)
+        unregister_model(cls._meta.app_label, cls)
 
         # remove from SA class registry
         if cls.__name__ in cls._decl_class_registry:

@@ -25,6 +25,7 @@ from sqlalchemy.orm import (relationship, backref, object_session,
 from baph.contrib.auth.mixins import UserPermissionMixin
 from baph.contrib.auth.registration import settings as auth_settings
 from baph.db.models.base import Model as Base
+from baph.db.models.manager import Manager
 from baph.db.types import UUID, Dict, List
 from baph.utils.strings import random_string
 from baph.utils.importing import remove_class
@@ -76,6 +77,7 @@ class Permission(Base):
     __table_args__ = {
         'info': {'preserve_during_flush': True},
         }
+
     id = Column(Integer, primary_key=True)
     name = Column(Unicode(100))
     codename = Column(String(100), unique=True)
@@ -202,6 +204,69 @@ class AnonymousUser(object):
     def has_perm(self, resource, action, filters=None):
         return False
 
+class UserManager(Manager):
+
+    @classmethod
+    def normalize_email(cls, email):
+        """
+        Normalize the address by lowercasing the domain part of the email
+        address.
+        """
+        email = email or ''
+        try:
+            email_name, domain_part = email.strip().rsplit('@', 1)
+        except ValueError:
+            pass
+        else:
+            email = '@'.join([email_name, domain_part.lower()])
+        return email
+
+    def make_random_password(self, length=10,
+                             allowed_chars='abcdefghjkmnpqrstuvwxyz'
+                                           'ABCDEFGHJKLMNPQRSTUVWXYZ'
+                                           '23456789'):
+        """
+        Generates a random password with the given length and given
+        allowed_chars. Note that the default value of allowed_chars does not
+        have "I" or "O" or letters and digits that look similar -- just to
+        avoid confusion.
+        """
+        return get_random_string(length, allowed_chars)
+
+    def _create_user(self, username, email, password, **extra_fields):
+        #print '_create_user:', cls, username, email, password
+        if not getattr(settings, 'BAPH_AUTH_WITHOUT_USERNAMES', False) and not username:
+            raise ValueError('The given username must be set')
+        if not any(f in extra_fields for f in (Organization.get_column_key(),
+                                              Organization.get_relation_key())):
+            # organization was not provided, try .get_current_id if available
+            try:
+                org_id = Organization.get_current_id()
+                extra_fields[Organization.get_column_key()] = org_id
+            except ImproperlyConfigured as e:
+                # get_current is not defined, org assignment is manual
+                pass
+            except Exception as e:
+                # No idea what caused this error
+                raise
+
+        email = self.normalize_email(email)
+        user = self.model(username=username, email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_user(self, username, email=None, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', False)
+        extra_fields.setdefault('is_superuser', False)
+        return self._create_user(username, email, password, **extra_fields)
+
+    def create_superuser(self, username, email, password, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        return self._create_user(username, email, password, **extra_fields)
+
+
 class AbstractBaseUser(Base, UserPermissionMixin):
     __abstract__ = True
     id = _generate_user_id_column()
@@ -262,62 +327,7 @@ class AbstractBaseUser(Base, UserPermissionMixin):
 
     # from UserManager
 
-    @classmethod
-    def normalize_email(cls, email):
-        """
-        Normalize the address by lowercasing the domain part of the email
-        address.
-        """
-        email = email or ''
-        try:
-            email_name, domain_part = email.strip().rsplit('@', 1)
-        except ValueError:
-            pass
-        else:
-            email = '@'.join([email_name, domain_part.lower()])
-        return email
 
-    @classmethod
-    def _create_user(cls, username, email, password, is_staff, is_superuser,
-                     **extra_fields):
-        #print '_create_user:', cls, username, email, password
-        now = datetime.now()
-        if not getattr(settings, 'BAPH_AUTH_WITHOUT_USERNAMES', False) and not username:
-            raise ValueError('The given username must be set')
-        if not any(f in extra_fields for f in (Organization.get_column_key(),
-                                              Organization.get_relation_key())):
-            # organization was not provided, try .get_current_id if available
-            try:
-                org_id = Organization.get_current_id()
-                extra_fields[Organization.get_column_key()] = org_id
-            except ImproperlyConfigured as e:
-                # get_current is not defined, org assignment is manual
-                pass
-            except Exception as e:
-                # No idea what caused this error
-                raise
-
-        email = cls.normalize_email(email)
-        user = cls(username=username, email=email, is_staff=is_staff,
-                   is_active=True, is_superuser=is_superuser, 
-                   last_login=now, date_joined=now, **extra_fields)
-        user.set_password(password)
-        session = orm.sessionmaker()
-        session.add(user)
-        session.commit()
-        return user
-
-    @classmethod
-    def create_user(cls, username=None, email=None, password=None,
-                    **extra_fields):
-        return cls._create_user(username, email, password, False, False,
-                                 **extra_fields)
-
-    @classmethod
-    def create_superuser(cls, username=None, email=None, password=None,
-                         **extra_fields):
-        return cls._create_user(username, email, password, True, True,
-                                 **extra_fields)
 
 
 class BaseUser(AbstractBaseUser):
@@ -431,42 +441,6 @@ if not hasattr(UserGroup, Organization.get_relation_key()):
         foreign_keys=[getattr(UserGroup, Organization.get_column_key())])
     setattr(UserGroup, Organization.get_relation_key(), rel)
 
-"""
-    user = relationship(User, backref=backref('groups',
-        cascade='all, delete-orphan'))
-    group = relationship(Group, backref=backref('user_groups',
-        cascade='all, delete-orphan'))
-
-"""
-
-"""
-if not hasattr(UserGroup, 'local_user'):
-    rel = RelationshipProperty(User,
-        backref='local_%s' % UserGroup._meta.model_name_plural,
-        foreign_keys=[
-            getattr(UserGroup, Organization.get_column_key()),
-            getattr(UserGroup, 'user_id'),
-            ])
-    setattr(UserGroup, 'local_user', rel)
-"""
-"""
-table_args = getattr(UserGroup, '__table_args__', tuple())
-
-fk = ForeignKeyConstraint(
-    [getattr(UserGroup, Organization.get_column_key()), UserGroup.user_id],
-    [getattr(User, Organization.get_column_key()), User.id],
-    )
-
-uq = UniqueConstraint(
-    getattr(UserGroup, Organization.get_column_key()),
-    UserGroup.user_id,
-    UserGroup.group_id,
-    UserGroup.key,
-    UserGroup.value)
-
-UserGroup.__table_args__ = (fk, uq) + table_args
-"""
-#
 
 class PermissionAssociation(Base):
     __tablename__ = PERMISSION_TABLE + '_assoc'
