@@ -2,10 +2,12 @@ from __future__ import unicode_literals
 
 from argparse import ArgumentParser
 from collections import defaultdict
+from importlib import import_module
 import os
 import pkgutil
 import sys
 
+from click.core import BaseCommand
 from flask.cli import FlaskGroup
 import six
 
@@ -14,7 +16,7 @@ from baph.apps import apps
 from baph.conf import settings
 from baph.conf.preconfigure import Preconfigurator
 from baph.core.exceptions import ImproperlyConfigured
-from baph.core.management.color import color_style
+from baph.core.cli.color import color_style
 from baph.utils import lru_cache
 from baph.utils._os import npath, upath
 
@@ -30,6 +32,15 @@ def find_commands(management_dir):
   print 'cmd dir:', command_dir
   return [name for _, name, is_pkg in pkgutil.iter_modules([npath(command_dir)])
           if not is_pkg and not name.startswith('_')]
+
+def load_command_class(app_name, name):
+    """
+    Given a command name and an application name, returns the Command
+    class instance. All errors raised by the import process
+    (ImportError, AttributeError) are allowed to propagate.
+    """
+    module = import_module('%s.commands.%s' % (app_name, name))
+    return module.Command()
 
 @lru_cache.lru_cache(maxsize=None)
 def get_commands():
@@ -254,6 +265,7 @@ class ManagementUtility(object):
     # These options could affect the commands that are available, so they
     # must be processed early.
     #parser = CommandParser(None, usage="%(prog)s subcommand [options] [args]", add_help=False)
+    print 'execute', sys.argv
     parser = ArgumentParser()
     parser.add_argument('--settings')
     parser.add_argument('--pythonpath')
@@ -263,6 +275,7 @@ class ManagementUtility(object):
     preconfig.add_arguments(parser)
 
     parser.add_argument('args', nargs='*')  # catch-all
+    print 'parser:', parser
     try:
       options, args = parser.parse_known_args(self.argv[1:])
       handle_default_options(options)
@@ -270,7 +283,7 @@ class ManagementUtility(object):
       pass  # Ignore any option errors at this point.
 
     try:
-      subcommand = options.args[1]
+      subcommand = options.args[0]
     except IndexError:
       subcommand = 'help'  # Display help if no arguments were given.
 
@@ -279,7 +292,7 @@ class ManagementUtility(object):
         'compilemessages', 'makemessages',
         'startapp', 'startproject',
     ]
-    print 'settings:', settings
+
     try:
       settings.INSTALLED_APPS
     except ImproperlyConfigured as exc:
@@ -311,12 +324,13 @@ class ManagementUtility(object):
     self.autocomplete()
 
     if subcommand == 'help':
+        print 'help subcommand'
         if '--commands' in args:
             sys.stdout.write(self.main_help_text(commands_only=True) + '\n')
-        elif len(options.args) < 1:
+        elif len(options.args) < 2:
             sys.stdout.write(self.main_help_text() + '\n')
         else:
-            self.fetch_command(options.args[0]).print_help(self.prog_name, options.args[0])
+            self.fetch_command(options.args[1]).print_help(self.prog_name, options.args[1])
     # Special-cases: We want 'django-admin --version' and
     # 'django-admin --help' to work, for backwards compatibility.
     elif subcommand == 'version' or self.argv[1:] == ['--version']:
