@@ -1,7 +1,7 @@
-from django.conf import settings
-from django.db.utils import ConnectionHandler
+from baph.conf import settings
+#from django.db.utils import ConnectionHandler
 
-
+'''
 DEFAULT_DB_ALIAS = 'default'
 
 
@@ -31,3 +31,4 @@ class EngineHandler(ConnectionHandler):
         conn = DatabaseWrapper(db, alias)
         setattr(self._connections, alias, conn)
         return conn
+'''

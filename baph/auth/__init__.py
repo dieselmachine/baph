@@ -2,9 +2,13 @@
 '''SQLAlchemy versions of :mod:`django.contrib.auth` utility functions.'''
 
 from datetime import datetime
-from django.contrib.auth import (SESSION_KEY, BACKEND_SESSION_KEY,
-    load_backend, user_logged_in)
+from django.contrib.auth import load_backend, user_logged_in
 from django.contrib.auth.models import AnonymousUser
+
+SESSION_KEY = '_auth_user_id'
+BACKEND_SESSION_KEY = '_auth_user_backend'
+HASH_SESSION_KEY = '_auth_user_hash'
+REDIRECT_FIELD_NAME = 'next'
 
 
 def login(request, user):

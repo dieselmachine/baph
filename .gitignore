@@ -1,3 +1,4 @@
+*.bak
 *.egg-info
 *.pyc
 .*.sw?
