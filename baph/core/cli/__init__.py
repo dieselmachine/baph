@@ -68,9 +68,6 @@ def get_commands():
   baph.setup()
   cli = FlaskGroup(__name__, create_app=baph.create_app)
 
-  for name, cmd in cli.commands.items():
-    print dir(cmd)
-
   #commands = {name: 'django.core' for name in find_commands(upath(__path__[0]))}
   commands = {name: 'flask' for name in cli.commands}
 
@@ -96,12 +93,9 @@ def handle_default_options(options):
   if options.pythonpath:
     sys.path.insert(0, options.pythonpath)
   preconfig = Preconfigurator()
-  print 'preconf settings:'
-  print options
-  for arg in preconfig.get_settings_names():
-    if getattr(options, arg, None):
-      os.environ[arg] = getattr(options, arg)
-
+  for setting in preconfig.core_settings:
+    if getattr(options, setting, None):
+      os.environ[setting] = getattr(options, setting)
 
 class ManagementUtility(object):
   """
@@ -265,7 +259,6 @@ class ManagementUtility(object):
     # These options could affect the commands that are available, so they
     # must be processed early.
     #parser = CommandParser(None, usage="%(prog)s subcommand [options] [args]", add_help=False)
-    print 'execute', sys.argv
     parser = ArgumentParser()
     parser.add_argument('--settings')
     parser.add_argument('--pythonpath')
@@ -275,7 +268,6 @@ class ManagementUtility(object):
     preconfig.add_arguments(parser)
 
     parser.add_argument('args', nargs='*')  # catch-all
-    print 'parser:', parser
     try:
       options, args = parser.parse_known_args(self.argv[1:])
       handle_default_options(options)
