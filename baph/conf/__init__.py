@@ -215,7 +215,7 @@ class Settings(BaseSettings):
         filename = '_'.join([prefix, filename])
       filenames.append(filename)
 
-    params = {setting: getattr(self, setting)
+    params = {setting: getattr(self, setting, None)
       for setting in self.preconfig.core_settings}
 
     filenames = [filename.format(**params) for filename in filenames]

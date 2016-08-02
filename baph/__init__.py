@@ -1,5 +1,7 @@
 from __future__ import unicode_literals
 
+from flask import Flask
+
 
 def setup():
   print 'setup'
@@ -15,4 +17,5 @@ def create_app(*args, **kwargs):
   setup()
   app = Flask(__name__)
   app.config.from_object(settings)
+  print 'returning:', app
   return app

@@ -8,6 +8,8 @@ import pkgutil
 import sys
 
 from click.core import BaseCommand
+from click.testing import CliRunner
+from flask import current_app
 from flask.cli import FlaskGroup
 import six
 
@@ -29,7 +31,7 @@ def find_commands(management_dir):
   Returns an empty list if no commands are defined.
   """
   command_dir = os.path.join(management_dir, 'commands')
-  print 'cmd dir:', command_dir
+  #print 'cmd dir:', command_dir
   return [name for _, name, is_pkg in pkgutil.iter_modules([npath(command_dir)])
           if not is_pkg and not name.startswith('_')]
 
@@ -65,6 +67,7 @@ def get_commands():
   The dictionary is cached on the first call and reused on subsequent
   calls.
   """
+  #print 'current app:', current_app
   baph.setup()
   cli = FlaskGroup(__name__, create_app=baph.create_app)
 
@@ -75,7 +78,7 @@ def get_commands():
     return commands
 
   for app_config in reversed(list(apps.get_app_configs())):
-    print 'app config:', app_config
+    #print 'app config:', app_config
     #path = os.path.join(app_config.path, 'management')
     path = app_config.path
     commands.update({name: app_config.name for name in find_commands(path)})
@@ -280,9 +283,9 @@ class ManagementUtility(object):
       subcommand = 'help'  # Display help if no arguments were given.
 
     no_settings_commands = [
-        'help', 'version', '--help', '--version', '-h',
-        'compilemessages', 'makemessages',
-        'startapp', 'startproject',
+      'help', 'version', '--help', '--version', '-h',
+      'compilemessages', 'makemessages',
+      'startapp', 'startproject',
     ]
 
     try:
@@ -292,37 +295,47 @@ class ManagementUtility(object):
       # A handful of built-in management commands work without settings.
       # Load the default settings -- where INSTALLED_APPS is empty.
       if subcommand in no_settings_commands:
-          settings.configure()
+        settings.configure()
 
     if settings.configured:
-        # Start the auto-reloading dev server even if the code is broken.
-        # The hardcoded condition is a code smell but we can't rely on a
-        # flag on the command class because we haven't located it yet.
-        if subcommand == 'runserver' and '--noreload' not in self.argv:
-            try:
-                autoreload.check_errors(django.setup)()
-            except Exception:
-                # The exception will be raised later in the child process
-                # started by the autoreloader. Pretend it didn't happen by
-                # loading an empty list of applications.
-                apps.all_models = defaultdict(OrderedDict)
-                apps.app_configs = OrderedDict()
-                apps.apps_ready = apps.models_ready = apps.ready = True
+      # Start the auto-reloading dev server even if the code is broken.
+      # The hardcoded condition is a code smell but we can't rely on a
+      # flag on the command class because we haven't located it yet.
+      if subcommand == 'runserver' and '--noreload' not in self.argv:
+        try:
+          autoreload.check_errors(django.setup)()
+        except Exception:
+          # The exception will be raised later in the child process
+          # started by the autoreloader. Pretend it didn't happen by
+          # loading an empty list of applications.
+          apps.all_models = defaultdict(OrderedDict)
+          apps.app_configs = OrderedDict()
+          apps.apps_ready = apps.models_ready = apps.ready = True
 
-        # In all other cases, django.setup() is required to succeed.
-        else:
-            baph.setup()
+      # In all other cases, django.setup() is required to succeed.
+      else:
+        baph.setup()
 
     self.autocomplete()
 
+    import click
+    @click.group(cls=FlaskGroup, create_app=baph.create_app)
+    def cli(**kwargs):
+      pass
+
+    print '\ncli:', cli
+
     if subcommand == 'help':
-        print 'help subcommand'
-        if '--commands' in args:
-            sys.stdout.write(self.main_help_text(commands_only=True) + '\n')
-        elif len(options.args) < 2:
-            sys.stdout.write(self.main_help_text() + '\n')
-        else:
-            self.fetch_command(options.args[1]).print_help(self.prog_name, options.args[1])
+      print 'help subcommand'
+      print '  args:', args
+      print '  options:', options
+      if '--commands' in args:
+        sys.stdout.write(self.main_help_text(commands_only=True) + '\n')
+      elif len(options.args) < 2:
+        sys.stdout.write(self.main_help_text() + '\n')
+      else:
+        self.fetch_command(options.args[1]) \
+            .print_help(self.prog_name, options.args[1])
     # Special-cases: We want 'django-admin --version' and
     # 'django-admin --help' to work, for backwards compatibility.
     elif subcommand == 'version' or self.argv[1:] == ['--version']:
@@ -330,7 +343,11 @@ class ManagementUtility(object):
     elif self.argv[1:] in (['--help'], ['-h']):
         sys.stdout.write(self.main_help_text() + '\n')
     else:
-        self.fetch_command(subcommand).run_from_argv(self.argv)
+      print 'running subcommand'
+      print '  args:', args
+      cli.main(args=[subcommand] + args, prog_name='test')
+
+      #self.fetch_command(subcommand).run_from_argv(self.argv)
 
 def execute_from_command_line(argv=None):
   """
