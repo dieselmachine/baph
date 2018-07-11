@@ -13,10 +13,9 @@ KEY_VALUE_SPLITTER = operator.methodcaller('split', '=', 1)
 def parse_metadump(line):
     # line format: <key>=<value>*
     split = operator.methodcaller('split', '=', 1)
-
-    data = dict(map(KEY_VALUE_SPLITTER, line))
-    data['key'] = data['key'].encode('utf8')
-    return data
+    pairs = [(key, unquote(value).encode('utf8'))
+        for key, value in map(KEY_VALUE_SPLITTER, line)]
+    return dict(pairs)
 
 def parse_cachedump(line, **kwargs):
     data = dict(kwargs)
@@ -171,7 +170,7 @@ class MemcacheServer(object):
         returns all keys on the server using 'stats cachedump'
         """
         func = partial(self.get_slab_keys_from_cachedump, limit=limit)
-        return reduce(operator.concat, map(func, self.slabs))
+        return reduce(operator.concat, map(func, self.slabs), [])
 
     def get_keys(self, limit=None, include_expired=False):
         """
