@@ -11,8 +11,10 @@ from chainmap import ChainMap
 from django.conf import global_settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.functional import LazyObject, empty
+from werkzeug.local import Local, LocalProxy
 
 from baph.core.preconfig.loader import PreconfigLoader
+from .loaders import AttrLoader, SettingsStack
 
 
 ENVIRONMENT_VARIABLE = "DJANGO_SETTINGS_MODULE"
@@ -401,4 +403,17 @@ class UserSettingsHolder:
       'cls': self.__class__.__name__,
     }
 
-settings = LazySettings()
+lazy_settings = LazySettings()
+
+wrapped_settings = AttrLoader(lazy_settings)
+
+local = Local()
+
+def get_loaders():
+    if not hasattr(local, 'loaders'):
+        local.loaders = [wrapped_settings]
+    return local.loaders
+
+settings = SettingsStack()
+settings.__module__ = 'django.conf'
+settings.chainmap.maps = LocalProxy(get_loaders)
