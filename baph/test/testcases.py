@@ -1,25 +1,23 @@
 from collections import defaultdict
-import json
 import time
 
 from django.conf import settings
-from django.core.cache import get_cache
 from django.db import DEFAULT_DB_ALIAS, connections, transaction
 from django import test
 from django.test.testcases import connections_support_transactions
-from sqlalchemy import create_engine
-from sqlalchemy.orm.session import Session
-from sqlalchemy.orm import sessionmaker
 
+from baph.core.cache import caches
 from baph.core.management import call_command
 from baph.db.orm import ORM
+from .client import Client
 from .signals import add_timing
 
 
 PRINT_TEST_TIMINGS = getattr(settings, 'PRINT_TEST_TIMINGS', False)
 
-#Session = sessionmaker()
+
 orm = ORM.get()
+
 
 class BaphFixtureMixin(object):
     reset_sequences = False
@@ -203,7 +201,7 @@ class BaphFixtureMixin(object):
 
     def run(self, *args, **kwargs):
         type(self).tests_run += 1
-        super(BaphFixtureMixin, self).run(*args, **kwargs)
+        return super(BaphFixtureMixin, self).run(*args, **kwargs)
 
     @classmethod
     def print_timings(cls):
@@ -255,9 +253,11 @@ class BaphFixtureMixin(object):
         super(BaphFixtureMixin, cls).setUpClass()
         if PRINT_TEST_TIMINGS:
             add_timing.connect(cls.add_timing)
+
         cls.session = orm.session_factory()
         if hasattr(cls, 'persistent_fixtures'):
             cls.load_fixtures(*cls.persistent_fixtures)
+
         '''
         cls.connection = orm.engine.connect()
         cls.session = Session(bind=cls.connection, autoflush=False)
@@ -282,6 +282,7 @@ class BaphFixtureMixin(object):
         cls.test_end_time = time.time()
         if PRINT_TEST_TIMINGS:
             cls.print_timings()
+
     '''
     def setUp(self):
         super(BaphFixtureMixin, self).setUp()
@@ -296,6 +297,7 @@ class BaphFixtureMixin(object):
         self.session.close()
         super(BaphFixtureMixin, self).tearDown()
     '''
+
     def _fixture_setup(self):
         if hasattr(self, 'fixtures'):
             self.load_fixtures(*self.fixtures)
@@ -332,20 +334,19 @@ class MemcacheMixin(object):
     def populate_cache(self, asset_aliases=None):
         """
         reads the current key/value pairs from the cache and
-        stores it in self.initial_data, for comparison with post-test results
+        stores it in self.initial, for comparison with post-test results
         """
         self.initial = {}
-        self.initial[None] = {k: self.cache._cache.get(k)
-            for k in self.cache.get_all_keys()}
+        self.initial[None] = self.cache.dump()
         for alias in asset_aliases or ():
-            cache = get_cache(alias)
-            self.initial[alias] = {k: cache._cache.get(k)
-                for k in cache.get_all_keys()}
+            cache = caches[alias]
+            self.initial[alias] = cache.dump()
 
     def _initial(self, cache_alias):
         """
-        Return the initial contents of the cache with the specified alias
-        for the special case where cache_alias is None, an empty dict will
+        Return the initial contents of the cache with the specified alias.
+
+        For the special case where cache_alias is None, an empty dict will
         be returned if the 'None' key isn't present
         This is to solve issues where test assertions are called but
         populate_cache was never called (which implies the test has no
@@ -362,66 +363,66 @@ class MemcacheMixin(object):
         self.assertEqual(rsp['x-from-cache'], 'False')
 
     def assertCacheKeyEqual(self, key, value, version=None, cache_alias=None):
-        cache = get_cache(cache_alias) if cache_alias else self.cache
+        cache = caches[cache_alias] if cache_alias else self.cache
         current_value = cache.get(key, version=version)
         self.assertEqual(current_value, value)
 
     def assertCacheKeyUnchanged(self, key, version=None, cache_alias=None):
-        cache = get_cache(cache_alias) if cache_alias else self.cache
+        cache = caches[cache_alias] if cache_alias else self.cache
         raw_key = cache.make_key(key, version=version)
         initial_value = self._initial(cache_alias).get(raw_key, 0)
         current_value = cache.get(key, version=version)
         self.assertEqual(current_value, initial_value)
 
     def assertCacheKeyCreated(self, key, version=None, cache_alias=None):
-        cache = get_cache(cache_alias) if cache_alias else self.cache
+        cache = caches[cache_alias] if cache_alias else self.cache
         raw_key = cache.make_key(key, version=version)
         self.assertNotIn(raw_key, self._initial(cache_alias).keys())
         self.assertIn(raw_key, cache.get_all_keys())
 
     def assertCacheKeyNotCreated(self, key, version=None, cache_alias=None):
-        cache = get_cache(cache_alias) if cache_alias else self.cache
+        cache = caches[cache_alias] if cache_alias else self.cache
         raw_key = cache.make_key(key, version=version)
         self.assertNotIn(raw_key, self._initial(cache_alias).keys())
         self.assertNotIn(raw_key, cache.get_all_keys())
 
     def assertCacheKeyIncremented(self, key, version=None, cache_alias=None):
-        cache = get_cache(cache_alias) if cache_alias else self.cache
+        cache = caches[cache_alias] if cache_alias else self.cache
         raw_key = cache.make_key(key, version=version)
         initial_value = self._initial(cache_alias).get(raw_key, 0)
         current_value = cache.get(key, version=version)
         self.assertEqual(current_value, initial_value+1)
 
     def assertCacheKeyIncrementedMulti(self, key, version=None, cache_alias=None):
-        cache = get_cache(cache_alias) if cache_alias else self.cache
+        cache = caches[cache_alias] if cache_alias else self.cache
         raw_key = cache.make_key(key, version=version)
         initial_value = self._initial(cache_alias)[raw_key]
         current_value = cache.get(key, version=version)
         self.assertGreater(current_value, initial_value)
         
     def assertCacheKeyInvalidated(self, key, version=None, cache_alias=None):
-        cache = get_cache(cache_alias) if cache_alias else self.cache
+        cache = caches[cache_alias] if cache_alias else self.cache
         raw_key = cache.make_key(key, version=version)
         current_value = cache.get(key, version=version)
         self.assertIn(raw_key, self._initial(cache_alias).keys())
         self.assertEqual(current_value, None)
 
     def assertCacheKeyNotInvalidated(self, key, version=None, cache_alias=None):
-        cache = get_cache(cache_alias) if cache_alias else self.cache
+        cache = caches[cache_alias] if cache_alias else self.cache
         raw_key = cache.make_key(key, version=version)
         current_value = cache.get(key, version=version)
         self.assertIn(raw_key, self._initial(cache_alias).keys())
         self.assertNotEqual(current_value, None)
 
     def assertPointerKeyInvalidated(self, key, version=None, cache_alias=None):
-        cache = get_cache(cache_alias) if cache_alias else self.cache
+        cache = caches[cache_alias] if cache_alias else self.cache
         raw_key = cache.make_key(key, version=version)
         current_value = cache.get(key, version=version)
         self.assertIn(raw_key, self._initial(cache_alias).keys())
         self.assertEqual(current_value, 0)
 
     def assertPointerKeyNotInvalidated(self, key, version=None, cache_alias=None):
-        cache = get_cache(cache_alias) if cache_alias else self.cache
+        cache = caches[cache_alias] if cache_alias else self.cache
         raw_key = cache.make_key(key, version=version)
         current_value = cache.get(key, version=version)
         self.assertIn(raw_key, self._initial(cache_alias).keys())
@@ -429,11 +430,11 @@ class MemcacheMixin(object):
 
 
 class TestCase(BaphFixtureMixin, test.TestCase):
-    pass
+    client_class = Client
 
 
 class LiveServerTestCase(BaphFixtureMixin, test.LiveServerTestCase):
-    pass
+    client_class = Client
 
 
 class MemcacheTestCase(MemcacheMixin, TestCase):

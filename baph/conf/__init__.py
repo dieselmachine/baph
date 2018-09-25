@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 #logger.setLevel(logging.INFO)
 #logger.addHandler(handler)
 
+local = Local()
+
+
 @contextmanager
 def local_path():
   orig = sys.path
@@ -61,7 +64,20 @@ class LazySettings(LazyObject):
         "You must either define the environment variable %s "
         "or call settings.configure() before accessing settings."
         % (desc, ENVIRONMENT_VARIABLE))
-    self._wrapped = Settings(settings_module)
+    #self._wrapped = Settings(settings_module)
+
+    settings = AttrLoader(Settings(settings_module))
+
+    def _get_loaders():
+      if not hasattr(local, 'loaders'):
+          local.loaders = [settings]
+      return local.loaders
+
+    stack = SettingsStack()
+    stack.__module__ = 'django.conf'
+    stack.chainmap.maps = LocalProxy(_get_loaders)
+    self._wrapped = stack
+    
 
   def __repr__(self):
     # Hardcode the class name as otherwise it yields 'Settings'.
@@ -101,6 +117,7 @@ class LazySettings(LazyObject):
     parameter sets where to retrieve any unspecified values from (its
     argument must support attribute access (__getattr__)).
     """
+    print 'configure:'
     if self._wrapped is not empty:
       raise RuntimeError('Settings already configured.')
     holder = UserSettingsHolder(default_settings)
@@ -365,6 +382,7 @@ class UserSettingsHolder:
     Requests for configuration variables not in this class are satisfied
     from the module specified in default_settings (if possible).
     """
+    print 'user settings init'
     self.__dict__['_deleted'] = set()
     self.default_settings = default_settings
 
@@ -403,17 +421,5 @@ class UserSettingsHolder:
       'cls': self.__class__.__name__,
     }
 
-lazy_settings = LazySettings()
 
-wrapped_settings = AttrLoader(lazy_settings)
-
-local = Local()
-
-def get_loaders():
-    if not hasattr(local, 'loaders'):
-        local.loaders = [wrapped_settings]
-    return local.loaders
-
-settings = SettingsStack()
-settings.__module__ = 'django.conf'
-settings.chainmap.maps = LocalProxy(get_loaders)
+settings = LazySettings()

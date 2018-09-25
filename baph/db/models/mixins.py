@@ -6,7 +6,6 @@ import time
 import types
 
 from django.conf import settings
-from django.core.cache import get_cache
 from sqlalchemy import *
 from sqlalchemy import inspect
 from sqlalchemy.ext.declarative import declared_attr
@@ -19,6 +18,7 @@ from sqlalchemy.orm.util import has_identity
 
 from baph.db import ORM
 from baph.db.models.utils import identity_key
+from baph.core.cache import caches
 from .utils import column_to_attr, class_resolver
 
 
@@ -164,7 +164,8 @@ class CacheMixin(object):
       """
       if not cls._meta.cache_alias:
         return None
-      return get_cache(cls._meta.cache_alias)
+      #return get_cache(cls._meta.cache_alias)
+      return caches[cls._meta.cache_alias]
 
     @classmethod
     def cache_fields(cls):
@@ -464,7 +465,7 @@ class CacheMixin(object):
       if not alias:
         raise Exception("Unable to determine cache alias for "
                         "asset type '%s'" % asset_type)
-      return get_cache(alias)
+      return caches[alias]
 
     @classmethod
     def build_cache_pointers(cls, data):
@@ -686,7 +687,7 @@ class CacheMixin(object):
         keymap[alias]['version'].add(key)
 
       for cache_alias, keys in keymap.items():
-        cache = get_cache(cache_alias)
+        cache = caches[cache_alias]
         cache.delete_many(keys['cache'])
         for key in keys['version']:
           v = cache.get(key)

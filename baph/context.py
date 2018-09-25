@@ -1,20 +1,21 @@
 import sys
-#from functools import partial
 from importlib import import_module
 
 from baph.apps import apps
-from coffin.common import env
 from django.utils.module_loading import module_has_submodule
 from werkzeug.local import Local, LocalProxy
 
 from .globals import _request_ctx_stack, _app_ctx_stack
+from ._compat import BROKEN_PYPY_CTXMGR_EXIT
 
 
 local = Local()
 _sentinel = object()
 
+
 class _LocalProxy(LocalProxy):
     pass
+
 
 def context_global(func):
     name = func.__name__
@@ -24,17 +25,29 @@ def context_global(func):
         return getattr(local, name)
     return _LocalProxy(inner)
 
+
+def collect_globals():
+    """
+    checks each app in INSTALLED_APPS for a globals.py file, collects all
+    @context_globals in those files, and returns a dict of globals
+    """
+    _globals = {}
+    for app in apps.get_app_configs():
+        if module_has_submodule(app.module, 'globals'):
+            module_name = '%s.%s' % (app.name, 'globals')
+            module = import_module(module_name)
+            for k, v in module.__dict__.items():
+                if isinstance(v, _LocalProxy):
+                    _globals[k] = v
+    return _globals
+
+
 class _AppCtxGlobals(object):
     def __init__(self):
-        for app in apps.get_app_configs():
-            if module_has_submodule(app.module, 'globals'):
-                module_name = '%s.%s' % (app.name, 'globals')
-                module = import_module(module_name)
-                for k, v in module.__dict__.items():
-                    if isinstance(v, _LocalProxy):
-                        setattr(self, k, v)
-                        env.globals[k] = v
-
+        from coffin.common import env
+        g = collect_globals()
+        self.__dict__.update(g)
+        env.globals.update(g)
 
     def get(self, name, default=None):
         return self.__dict__.get(name, default)
@@ -76,7 +89,6 @@ class AppContext(object):
         if hasattr(sys, 'exc_clear'):
             sys.exc_clear()
         _app_ctx_stack.push(self)
-        #appcontext_pushed.send(self.app)
 
     def pop(self, exc=_sentinel):
         """Pops the app context."""
@@ -85,7 +97,7 @@ class AppContext(object):
             if self._refcnt <= 0:
                 if exc is _sentinel:
                     exc = sys.exc_info()[1]
-                #self.app.do_teardown_appcontext(exc)
+                self.app.do_teardown_appcontext(exc)
         finally:
             rv = _app_ctx_stack.pop()
         assert rv is self, 'Popped wrong app context.  (%r instead of %r)' \
@@ -116,7 +128,7 @@ class RequestContext(object):
 
         self._implicit_app_ctx_stack = []
         self.preserved = False
-        self._reserved_exc = None
+        self._preserved_exc = None
         self._after_request_functions = []
         #self.match_request()
 
@@ -144,13 +156,18 @@ class RequestContext(object):
     '''
 
     def push(self):
+        #print 'push req ctx', id(self)
         top = _request_ctx_stack.top
         if top is not None and top.preserved:
             top.pop(top._preserved_exc)
 
         app_ctx = _app_ctx_stack.top
+        #print '  app ctx:', id(app_ctx)
+        #print '  app:', app_ctx.app
         if app_ctx is None or app_ctx.app != self.app:
             app_ctx = self.app.app_context()
+            #print '  new app ctx', id(app_ctx)
+            #print '  new app:', app_ctx.app
             app_ctx.push()
             self._implicit_app_ctx_stack.append(app_ctx)
         else:
@@ -179,6 +196,7 @@ class RequestContext(object):
         .. versionchanged:: 0.9
            Added the `exc` argument.
         """
+        #print 'pop req ctx', id(self)
         app_ctx = self._implicit_app_ctx_stack.pop()
 
         try:
@@ -198,6 +216,7 @@ class RequestContext(object):
                     sys.exc_clear()
 
                 request_close = getattr(self.request, 'close', None)
+                #print 'request close:', request_close
                 if request_close is not None:
                     request_close()
                 clear_request = True
@@ -212,11 +231,11 @@ class RequestContext(object):
             # Get rid of the app as well if necessary.
             if app_ctx is not None:
                 app_ctx.pop(exc)
-
             assert rv is self, 'Popped wrong request context.  ' \
                 '(%r instead of %r)' % (rv, self)
 
     def auto_pop(self, exc):
+        #print 'autopop:', id(self)
         if self.request.environ.get('flask._preserve_context') or \
            (exc is not None and self.app.preserve_context_on_exception):
             self.preserved = True

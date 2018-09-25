@@ -1,18 +1,13 @@
 from collections import defaultdict
-import json
-import os
-import sys
 
 from django.core.cache import get_cache
+from django.utils.functional import cached_property
 from django.utils.termcolors import make_style
-from MySQLdb.converters import conversions, escape
-from sqlalchemy import inspect
-from sqlalchemy import *
-from sqlalchemy.exc import ResourceClosedError
-from sqlalchemy.orm import lazyload, contains_eager, class_mapper
-from sqlalchemy.sql import compiler
 
-from baph.core.management.base import BaseCommand #NoArgsCommand
+from sqlalchemy import *
+from sqlalchemy.orm import class_mapper
+
+from baph.core.management.new_base import BaseCommand
 from baph.db.orm import ORM
 
 
@@ -24,35 +19,15 @@ info_msg = make_style(fg='blue')
 orm = ORM.get()
 Base = orm.Base
 
-def get_cacheable_models():
-    for k,v in sorted(Base._decl_class_registry.items()):
-        if k.startswith('_'):
-            # skip internal SA attrs
-            continue
-        if v._meta.cache_detail_fields:
-            yield k
 
-def lookup_model():
-    name = raw_input('Enter model name ("L" to list): ')
-    name = name.lower()
-    for k,v in Base._decl_class_registry.items():
-        if k.startswith('_'):
-            continue
-        if name == 'l':
-            print '\t%s' % k, v._meta.cache_detail_keys
-        if name == k.lower():
-            return v
-    if name != 'l':
-        print 'Invalid choice: %s' % name
-
-def prompt_for_model_name():
+def prompt_for_model_name(cacheable_models):
     while True:
         cmd = raw_input('\nKill cache for which model? '
                         '(ENTER to list, Q to quit): ')
         if cmd in ('q', 'Q'):
             return None
-        if not cmd:
-            for name in get_cacheable_models():
+        if not cmd.strip():
+            for name in sorted(cacheable_models):
                 print '    %s' % name
             continue
         return cmd
@@ -70,29 +45,38 @@ class Command(BaseCommand):
     help = "Kills cache keys for baph models"
     args = "modelname [id id ...]"
 
-    def handle(self, *args, **options):
-        if len(args) > 0:
-            model_name = args[0]
-        else:
-            model_name = None
-        
-        if len(args) > 1:
-            pks = args[1:]
-        else:
-            pks = None
+    def add_arguments(self, parser):
+        parser.add_argument('model_name', nargs='?',
+            help='The name of the model')
+        parser.add_argument('model_pks', nargs='*',
+            help='The primary keys to invalidate')
+
+    @cached_property
+    def cacheable_models(self):
+        models = {}
+        for name, model in Base._decl_class_registry.items():
+            if hasattr(model, '_meta') and model._meta.cache_detail_fields:
+                models[name] = model
+        return models
+
+    def handle(self, **options):
+        print 'handle:', options
+        model_name = options['model_name']
+        pks = options['model_pks']
 
         print ''
         while True:
             if not model_name:
-                model_name = prompt_for_model_name()
+                model_name = prompt_for_model_name(self.cacheable_models)
             if not model_name:
                 # quit
                 break
-            if not model_name in Base._decl_class_registry:
+            #if not model_name in Base._decl_class_registry:
+            if not model_name in self.cacheable_models:
                 print error_msg('Invalid model name: %s' % model_name)
                 model_name = None
                 continue
-            model = Base._decl_class_registry[model_name]
+            model = self.cacheable_models[model_name]
 
             if not pks:
                 pk = prompt_for_pk(model)
@@ -131,7 +115,8 @@ class Command(BaseCommand):
                     cache.delete_many(keys['cache_keys'])
                     for key in keys['version_keys']:
                         print '  Incrementing version key: %r' % key
-                        cache.incr(key)
+                        if cache.get(key):
+                            cache.incr(key)
 
             model_name = None
             pks = None

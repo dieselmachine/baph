@@ -7,9 +7,6 @@ from chainmap import ChainMap
 class BaseLoader(Mapping):
 
     def __init__(self, source):
-        print '  %s.__init__:' % type(self).__name__
-        if not source:
-            assert False
         self.source = source
 
     def getitem(self, key):
@@ -81,7 +78,7 @@ class ContextStack(ChainMap):
 class SettingsStack(object):
 
     def __init__(self, *maps):
-        print '  %s.__init__:' % type(self).__name__
+        #print '  %s.__init__:' % type(self).__name__
         self.chainmap = ChainMap()
 
     def __getattr__(self, key):
@@ -102,7 +99,7 @@ class SettingsStack(object):
             raise AttributeError()
 
     def push_ctx(self, ctx):
-        print 'push ctx:', len(self.chainmap.maps)
+        #print 'push ctx:', len(self.chainmap.maps)
         self.chainmap.maps.append(ctx)
 
     # common reducers

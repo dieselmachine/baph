@@ -13,27 +13,6 @@ class Command(BaseCommand):
     help = ('Discover and run tests in the specified modules or the '
             'current directory.')
     test_runner = None
-    '''
-    option_list = BaseCommand.option_list + (
-        make_option('--noinput',
-            action='store_false', dest='interactive', default=True,
-            help='Tells Django to NOT prompt the user for input of any kind.'),
-        make_option('--failfast',
-            action='store_true', dest='failfast', default=False,
-            help='Tells Django to stop running the test suite after first '
-                 'failed test.'),
-        make_option('--testrunner',
-            action='store', dest='testrunner',
-            help='Tells Django to use specified test runner class instead of '
-                 'the one specified by the TEST_RUNNER setting.'),
-        make_option('--liveserver',
-            action='store', dest='liveserver', default=None,
-            help='Overrides the default address where the live server (used '
-                 'with LiveServerTestCase) is expected to run from. The '
-                 'default value is localhost:8081.'),
-    )
-    args = '[appname ...]'
-    '''
 
     def run_from_argv(self, argv):
       """
@@ -103,8 +82,13 @@ class Command(BaseCommand):
     def handle(self, *test_labels, **options):
       from django.conf import settings
       from django.test.utils import get_runner
+      from baph.core.wsgi import get_wsgi_application
+      app = get_wsgi_application()
+      #ctx = app.app_context()
+      #print 'CTX:', ctx
 
       TestRunner = get_runner(settings) #, options.get('testrunner'))
+
       '''
       options['verbosity'] = int(options.get('verbosity'))
 
@@ -113,7 +97,8 @@ class Command(BaseCommand):
         del options['liveserver']
       '''
       test_runner = TestRunner(**options)
-      failures = test_runner.run_tests(test_labels)
+      with app.app_context():
+        failures = test_runner.run_tests(test_labels)
 
       if failures:
         sys.exit(1)
