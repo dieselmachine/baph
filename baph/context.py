@@ -42,6 +42,30 @@ def collect_globals():
     return _globals
 
 
+def set_global(name, value):
+    setattr(local, name, value)
+
+
+def set_globals(**kwargs):
+    for k, v in kwargs.iteritems():
+        set_global(k, v)
+
+
+def clear_global(name):
+    """
+    clears the cached value of a global variable
+    """
+    if hasattr(local, name):
+        delattr(local, name)
+
+
+def clear_globals(*names):
+    """
+    clears the cached values of multiple global variables
+    """
+    map(clear_global, names)
+
+
 class _AppCtxGlobals(object):
     def __init__(self):
         from coffin.common import env
