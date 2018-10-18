@@ -1,4 +1,7 @@
 from collections import defaultdict
+from functools import cmp_to_key
+import locale
+import operator
 import time
 
 from django.conf import settings
@@ -17,6 +20,13 @@ PRINT_TEST_TIMINGS = getattr(settings, 'PRINT_TEST_TIMINGS', False)
 
 
 orm = ORM.get()
+
+
+def identity(value):
+    """
+    identity function. used as a getter for ordering comparisons
+    """
+    return value
 
 
 class BaphFixtureMixin(object):
@@ -306,27 +316,38 @@ class BaphFixtureMixin(object):
         if hasattr(self, 'fixtures'):
             self.purge_fixtures(*self.fixtures)
 
-    def assertItemsOrderedBy(self, items, field):
-        if not items:
-            # no items, no ordering to check
-            return
-        if isinstance(items[0], dict):
-            key = lambda x: x[field]
-        else:
-            key = lambda x: getattr(x, field)
-        ordered = sorted(items, key=key)
-        self.assertEqual(items, ordered)
+    def assertOrdered(self, items, key=None, **kwargs):
+        if len(items) < 2:
+            raise Exception('Cannot test ordering with only %d items.'
+                            % len(items))
 
-    def assertItemsReverseOrderedBy(self, items, field):
-        if not items:
-            # no items, no ordering to check
-            return
-        if isinstance(items[0], dict):
-            key = lambda x: x[field]
+        if isinstance(items[0], (basestring, int, long)):
+            getter = identity
+        elif isinstance(items[0], dict):
+            getter = operator.itemgetter(key)
         else:
-            key = lambda x: getattr(x, field)
-        ordered = sorted(items, key=key)[::-1]
-        self.assertEqual(items, ordered)
+            getter = operator.attrgetter(key)
+
+        values = map(getter, items)
+        if len(set(values)) < 2:
+            raise Exception('Cannot test ordering with only %d distinct '
+                            'values.' % len(set(values)))
+
+        if isinstance(values[0], basestring):
+            kwargs['key'] = cmp_to_key(locale.strcoll)
+        expected = sorted(values, **kwargs)
+        self.assertEqual(expected, values, 'Items are not in expected order')
+
+    def assertAscending(self, items, key=None):
+        self.assertOrdered(items, key)
+
+    def assertDescending(self, items, key=None):
+        self.assertOrdered(items, key, reverse=True)
+
+    # old aliases
+
+    assertItemsOrderedBy = assertAscending
+    assertItemsReverseOrderedBy = assertDescending
 
 
 class MemcacheMixin(object):
