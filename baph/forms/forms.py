@@ -39,6 +39,7 @@ ALL_FIELDS = '__all__'
 
 orm = ORM.get()
 
+
 def save_instance(form, instance, fields=None, fail_message='saved',
                   commit=True, exclude=None):
     """
@@ -48,21 +49,29 @@ def save_instance(form, instance, fields=None, fail_message='saved',
     database. Returns ``instance``.
     """
     opts = instance._meta
-    for k,v in form.cleaned_data.items():
-        if k in form.data:
-            try:
-                # TODO: this fails when trying to reach the remote side
-                # of an association_proxy when the interim node is None
-                # find a better solution
-                setattr(instance, k, v)
-            except TypeError as e:
-                continue
-                
+    for k, v in form.cleaned_data.items():
+        if k not in form.data:
+            # ignore values that weren't submitted
+            continue
+        current = getattr(instance, k, None)
+        if current == v:
+            # value is unchanged
+            continue
+
+        try:
+            # TODO: this fails when trying to reach the remote side
+            # of an association_proxy when the interim node is None
+            # find a better solution
+            setattr(instance, k, v)
+        except TypeError:
+            continue
+
     if form.errors:
         raise ValueError("The %s could not be %s because the data didn't"
                          " validate." % (opts.object_name, fail_message))
 
 # ModelForms
+
 
 def model_to_dict(instance, fields=None, exclude=None):
     opts = instance._meta
@@ -81,6 +90,7 @@ def model_to_dict(instance, fields=None, exclude=None):
         continue
       data[f.name] = getattr(instance, f.name)
     return data
+
 
 def fields_for_model(model, fields=None, exclude=None, widgets=None, 
                      formfield_callback=None, localized_fields=None,
@@ -167,6 +177,7 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
 
     return field_dict
 
+
 class SQLAModelFormOptions(object):
     def __init__(self, options=None):
         self.model = getattr(options, 'model', None)
@@ -215,6 +226,7 @@ class SQLAModelFormMetaclass(type):
         new_class.base_fields = fields
         return new_class
 
+
 class BaseSQLAModelForm(forms.forms.BaseForm):
     def __init__(self, data=None, files=None, auto_id='id_%s', prefix=None,
                  initial=None, instance=None, nested=False, **kwargs):
@@ -261,7 +273,8 @@ class BaseSQLAModelForm(forms.forms.BaseForm):
             fail_message = 'changed'
         return save_instance(self, self.instance, self._meta.fields,
                              fail_message, commit, self._meta.exclude)
-        
+
+
 class SQLAModelForm(BaseSQLAModelForm):
     __metaclass__ = SQLAModelFormMetaclass
 
@@ -301,6 +314,7 @@ class SQLAModelForm(BaseSQLAModelForm):
         org_key = Organization._meta.model_name + '_id'
         kwargs[org_key] = Organization.get_current_id()
         return self.clean_unique_field(key, **kwargs)
+
 
 def modelform_factory(model, form=SQLAModelForm, fields=None, exclude=None,
                       formfield_callback=None, widgets=None, localized_fields=None,
