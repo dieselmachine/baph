@@ -1,7 +1,7 @@
-from collections import defaultdict
-from functools import partial
 import operator
 import time
+from collections import defaultdict
+from functools import partial
 from urllib import unquote
 
 from cached_property import cached_property
@@ -10,23 +10,26 @@ from django.core.cache.backends.memcached import MemcachedCache
 
 KEY_VALUE_SPLITTER = operator.methodcaller('split', '=', 1)
 
+
 def parse_metadump(line):
     # line format: <key>=<value>*
-    split = operator.methodcaller('split', '=', 1)
+    # split = operator.methodcaller('split', '=', 1)
     pairs = [(key, unquote(value).encode('utf8'))
-        for key, value in map(KEY_VALUE_SPLITTER, line)]
+             for key, value in map(KEY_VALUE_SPLITTER, line)]
     return dict(pairs)
+
 
 def parse_cachedump(line, **kwargs):
     data = dict(kwargs)
     key, metadata = line
     data['key'] = key.encode('utf8')
-    metadata = metadata[1:-1] # strip brackets
+    metadata = metadata[1:-1]  # strip brackets
     for key in ('size', 'exp'):
         stat, sep, metadata = metadata.partition(';')
         value, unit = stat.strip().split(' ', 1)
         data[key] = int(value)
     return data
+
 
 def parse_stat(line):
     # line format: STAT <key> <value>
@@ -37,11 +40,11 @@ class MemcacheServer(object):
     def __init__(self, server):
         self.server = server
 
-    @cached_property
+    @property
     def settings(self):
         return dict(self.get_stats('settings'))
 
-    @cached_property
+    @property
     def slabs(self):
         return self.get_slabs()
 
@@ -83,15 +86,11 @@ class MemcacheServer(object):
         """
         cmd = 'flush_all'
         return self.send_command(cmd, expect='OK')
-        #self.delete_many_raw(self.get_keys())
-
-    def delete_many_raw(self, keys):
-        """
-        Deletes the specified keys (does not run them through make_key)
-        """
-        self.server._cache.delete_multi(keys)
 
     def get_metadump(self, slab_id):
+        """
+        Returns a list of (key, value) tuples containing cache item stats
+        """
         cmd = 'lru_crawler metadump %s' % slab_id
         return map(parse_metadump, self.send_command(cmd))
 
@@ -101,7 +100,6 @@ class MemcacheServer(object):
         """
         cmd = ' '.join(('stats',) + args)
         return map(parse_stat, self.send_command(cmd, 3))
-
 
     # STATS command variants
 
@@ -180,11 +178,13 @@ class MemcacheServer(object):
             func = self.get_keys_from_metadump
         else:
             func = self.get_keys_from_cachedump
+
         getter = operator.itemgetter('key')
-        ts = time.time()
+        ts = int(time.time())
         items = func(limit)
         if not include_expired:
-            items = filter(lambda x: x['exp'] > ts, items)
+            # expiration of 0 means an item never expires
+            items = filter(lambda x: x['exp'] == 0 or x['exp'] > ts, items)
         return map(getter, items)
 
 
@@ -200,16 +200,50 @@ class BaphMemcachedCache(MemcachedCache):
     def __str__(self):
         return '<BaphMemcachedCache: alias=%r>' % self.alias
 
+    @property
+    def ident(self):
+        return '(%s:%s)' % (self.alias, id(self))
+
     @cached_property
     def servers(self):
         return map(MemcacheServer, self._cache.servers)
 
     def get_all_keys(self):
+        """
+        Returns all keys on all servers
+
+        Keys may or may not be valid - a flush_all command does not
+        have any impact on the keys, and invalidation is handled later
+        by comparing a value in the server settings to the 'time' attribute
+        of the cached item (that attribute is not retrievable, so there is
+        no way to get the 'real' list of keys
+        """
         keys = set()
         for server in self.servers:
             keys.update(server.get_keys())
         return keys
 
     def flush_all(self):
+        """
+        Invalidates all keys on all servers
+        """
         for server in self.servers:
             server.flush_all()
+
+    def get_raw(self, key):
+        """
+        does a cache lookup for a key, without running it through the
+        make_key function
+        """
+        return self._cache.get(key)
+
+    def dump(self):
+        """
+        Dumps the contents of the cache as a dict
+        """
+        data = {}
+        for key in self.get_all_keys():
+            value = self.get_raw(key)
+            if value is not None:
+                data[key] = value
+        return data

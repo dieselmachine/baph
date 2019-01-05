@@ -1,5 +1,5 @@
 import baph
-from django.core.handlers.wsgi import WSGIHandler
+from baph.core.handlers.wsgi import WSGIHandler
 
 
 def get_wsgi_application():

@@ -60,7 +60,7 @@ def build_suite(app_module):
     """
     Create a complete Django test suite for the provided application module.
     """
-    suite = unittest.TestSuite()
+    suite = TestSuite()
 
     # Load unit and doctests in the models.py module. If module has
     # a suite() method, use it. Otherwise build the test suite ourselves.
@@ -181,11 +181,37 @@ def build_test(label):
     # Construct a suite out of the tests that matched.
     return unittest.TestSuite(tests)
 
+from unittest2.suite import _isnotsuite
+
+class TestSuite(unittest.TestSuite):
+    def _wrapped_run(self, result, debug=False):
+        for index, test in enumerate(self):
+            if result.shouldStop:
+                break
+            
+            if _isnotsuite(test):
+                self._tearDownPreviousClass(test, result)
+                self._handleModuleFixture(test, result)
+                self._handleClassSetUp(test, result)
+                result._previousTestClass = test.__class__
+                
+                if (getattr(test.__class__, '_classSetupFailed', False) or 
+                    getattr(result, '_moduleSetUpFailed', False)):
+                    continue
+            
+            if hasattr(test, '_wrapped_run'):
+                test._wrapped_run(result, debug)
+            elif not debug:
+                test(result)
+            else:
+                test.debug()
+            self._tests[index] = None
+
 
 class BaphTestSuiteRunner(runner.DiscoverRunner):
 
     def build_suite(self, test_labels, extra_tests=None, **kwargs):
-        suite = unittest.TestSuite()
+        suite = TestSuite()
 
         if test_labels:
             for label in test_labels:

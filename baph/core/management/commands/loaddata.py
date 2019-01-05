@@ -157,6 +157,7 @@ class Command(BaseCommand):
         for fixture_label in fixture_labels:
           self.load_label(fixture_label)
         session.commit()
+        session.expunge_all()
 
         # Since we disabled constraint checks, we must manually check for
         # any invalid keys that might have been added

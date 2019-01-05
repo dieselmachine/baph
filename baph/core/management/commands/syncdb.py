@@ -202,8 +202,11 @@ class Command(NoArgsCommand):
         emit_post_sync_signal(created_models, verbosity, interactive, db)
 
         # Load initial_data fixtures (unless that has been disabled)
+        '''
         if load_initial_data:
             call_command('loaddata', 'initial_data', verbosity=verbosity,
-                         database=db, skip_validation=True)
+                         database=db, skip_validation=True,
+                         app_label=app_label, hide_empty=True)
+        '''
 
 

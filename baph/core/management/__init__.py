@@ -14,6 +14,7 @@ import baph
 from baph.apps import apps
 from baph.core.management.base import (
   BaseCommand, CommandError, handle_default_options)
+from baph.core.management.new_base import BaseCommand as Base2
 from baph.core.preconfig.loader import PreconfigLoader
 from .utils import get_command_options, get_parser_options
 
@@ -28,6 +29,7 @@ def get_subcommand(args):
 def call_command(command_name, *args, **options):
   preconfig = PreconfigLoader.load()
   values = preconfig.load_values()
+  cmds = get_commands()
 
   if isinstance(command_name, BaseCommand):
     command = command_name
@@ -74,6 +76,7 @@ def call_command(command_name, *args, **options):
   args = defaults.pop('args', ())
   if 'skip_checks' not in options:
     defaults['skip_checks'] = True
+  
   return command.execute(*args, **defaults)
 
 class ManagementUtility(management.ManagementUtility):
