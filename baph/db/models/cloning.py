@@ -1,6 +1,6 @@
 import copy
 
-from sqlalchemy import inspect
+from sqlalchemy import Column, inspect
 from sqlalchemy.orm import class_mapper
 from sqlalchemy.orm.attributes import instance_dict
 from sqlalchemy.orm.collections import MappedCollection
@@ -98,6 +98,9 @@ def get_default_columns(cls):
   excludes = get_default_excludes(cls)
 
   for prop in mapper.column_attrs:
+    if not isinstance(prop.columns[0], Column):
+      # non-column ColumnProperty (Label, etc)
+      continue
     key = prop.key
     if key in excludes:
       continue
