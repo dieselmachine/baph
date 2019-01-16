@@ -16,7 +16,7 @@ from sqlalchemy.orm import mapper, object_session, class_mapper, attributes
 from sqlalchemy.orm.interfaces import MANYTOONE
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 from sqlalchemy.orm.session import Session
-from sqlalchemy.orm.util import has_identity, identity_key
+from sqlalchemy.orm.util import has_identity
 from sqlalchemy.schema import ForeignKeyConstraint
 from sqlalchemy.util import classproperty
 
@@ -25,7 +25,7 @@ from baph.db.models import signals
 from baph.db.models.loading import get_model, register_models
 from baph.db.models.mixins import CacheMixin, ModelPermissionMixin, GlobalMixin
 from baph.db.models.options import Options
-from baph.db.models.utils import class_resolver, key_to_value
+from baph.db.models.utils import class_resolver, identity_key, key_to_value
 from baph.utils.functional import cachedclassproperty
 from baph.utils.importing import safe_import, remove_class
 

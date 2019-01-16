@@ -10,10 +10,10 @@ from sqlalchemy import inspect
 from sqlalchemy import *
 from sqlalchemy.exc import ResourceClosedError
 from sqlalchemy.orm import lazyload, contains_eager, class_mapper
-from sqlalchemy.orm.util import identity_key
 from sqlalchemy.sql import compiler
 
 from baph.core.management.base import BaseCommand #NoArgsCommand
+from baph.db.models.utils import identity_key
 from baph.db.orm import ORM
 
 

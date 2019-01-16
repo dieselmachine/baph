@@ -6,8 +6,8 @@ from sqlalchemy.orm.attributes import instance_dict
 from sqlalchemy.orm.collections import MappedCollection
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 from sqlalchemy.orm.session import object_session
-from sqlalchemy.orm.util import identity_key
 
+from baph.db.models.utils import identity_key
 from baph.db.orm import ORM
 from baph.utils.collections import duck_type_collection
 

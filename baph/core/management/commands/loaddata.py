@@ -1,11 +1,11 @@
 from __future__ import unicode_literals
+
 import glob
 import gzip
 from itertools import product
 import logging
 import os
 import zipfile
-from optparse import make_option
 import warnings
 try:
     import bz2
@@ -24,13 +24,12 @@ from django.db import (
 from django.utils._os import upath
 from django.utils.datastructures import SortedDict
 from django.utils.functional import cached_property, memoize
-from sqlalchemy.orm.attributes import instance_dict
 from sqlalchemy.orm.session import Session
-from sqlalchemy.orm.util import identity_key
 
 from baph.core.management.new_base import BaseCommand
 from baph.db import DEFAULT_DB_ALIAS
 from baph.db.models import get_app_paths
+from baph.db.models.utils import identity_key
 from baph.db.orm import ORM
 from baph.utils.glob import glob_escape
 
@@ -68,6 +67,7 @@ def get_deferred_updates(session):
         if update:
             deferred.append((type(obj), filters, update))
     return deferred
+
 
 class Command(BaseCommand):
     help = 'Installs the named fixture(s) in the database.'

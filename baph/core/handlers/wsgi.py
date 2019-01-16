@@ -15,7 +15,7 @@ class WSGIHandler(BaseHandler):
     request_class = wsgi.WSGIRequest
 
     def wsgi_app(self, environ, start_response):
-        print 'wsgi handler'
+        #print 'wsgi handler'
         start = time()
         ctx = self.request_context(environ)
         error = None
@@ -37,7 +37,7 @@ class WSGIHandler(BaseHandler):
             for c in response.cookies.values():
                 response_headers.append((str('Set-Cookie'), str(c.output(header=''))))
             elapsed = time() - start
-            print 'WSGI call took:', elapsed
+            #print 'WSGI call took:', elapsed
             start_response(force_str(status), response_headers)
             return response
         finally:
@@ -46,7 +46,7 @@ class WSGIHandler(BaseHandler):
             ctx.auto_pop(error)
 
     def __call__(self, environ, start_response):
-        print '\nWSGIHandler.__call__:'
+        #print '\nWSGIHandler.__call__:'
         # django
         if self._request_middleware is None:
             with self.initLock:

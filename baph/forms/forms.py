@@ -5,14 +5,12 @@ from django.utils.translation import ugettext_lazy as _
 from sqlalchemy import *
 from sqlalchemy import inspect
 from sqlalchemy.ext.associationproxy import AssociationProxy
-from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm.attributes import instance_dict
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
-from sqlalchemy.orm.util import has_identity, identity_key
-from sqlalchemy.sql.expression import _BinaryExpression, _Label
+from sqlalchemy.orm.util import has_identity
 
 from baph.auth.models import Organization
 from baph.db import types, ORM
+from baph.db.models.utils import identity_key
 from baph.forms import fields
 
 
@@ -48,16 +46,23 @@ def save_instance(form, instance, fields=None, fail_message='saved',
     database. Returns ``instance``.
     """
     opts = instance._meta
-    for k,v in form.cleaned_data.items():
-        if k in form.data:
-            try:
-                # TODO: this fails when trying to reach the remote side
-                # of an association_proxy when the interim node is None
-                # find a better solution
-                setattr(instance, k, v)
-            except TypeError as e:
-                continue
-                
+    for k, v in form.cleaned_data.items():
+        if k not in form.data:
+            # ignore values that weren't submitted
+            continue
+        current = getattr(instance, k, None)
+        if current == v:
+            # value is unchanged
+            continue
+
+        try:
+            # TODO: this fails when trying to reach the remote side
+            # of an association_proxy when the interim node is None
+            # find a better solution
+            setattr(instance, k, v)
+        except TypeError:
+            continue
+
     if form.errors:
         raise ValueError("The %s could not be %s because the data didn't"
                          " validate." % (opts.object_name, fail_message))

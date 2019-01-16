@@ -15,10 +15,10 @@ from sqlalchemy.ext.hybrid import hybrid_method
 from sqlalchemy.orm import class_mapper, object_session
 from sqlalchemy.orm.attributes import get_history, instance_dict
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
-from sqlalchemy.orm.util import has_identity, identity_key
+from sqlalchemy.orm.util import has_identity
 
 from baph.db import ORM
-from .utils import column_to_attr, class_resolver
+from .utils import column_to_attr, class_resolver, identity_key
 
 
 cache_logger = logging.getLogger('cache')

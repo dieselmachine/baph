@@ -2,6 +2,12 @@ import types
 
 from sqlalchemy import inspect
 from sqlalchemy.ext.declarative.clsregistry import _class_resolver
+from sqlalchemy.orm.util import identity_key as new_identity_key
+
+
+def identity_key(*args, **kwargs):
+    """ returns a 2-tuple identity key, not the 3-tuple in newer SQLA """
+    return new_identity_key(*args, **kwargs)[:2]
 
 
 def has_inherited_table(cls):
@@ -16,6 +22,7 @@ def has_inherited_table(cls):
         if getattr(class_, '__table__', None) is not None:
             return True
     return False
+
 
 def class_resolver(cls):
     """
@@ -39,6 +46,7 @@ def class_resolver(cls):
         # sqla class
         return cls
     raise Exception('could not resolve class: %s' % cls)
+
 
 def column_to_attr(cls, col):
     """
