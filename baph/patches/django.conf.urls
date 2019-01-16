@@ -1,0 +1,39 @@
+from importlib import import_module
+
+from django.conf.urls import url
+from django.core.exceptions import ImproperlyConfigured
+from django.core.urlresolvers import LocaleRegexURLResolver
+from werkzeug.local import LocalProxy
+
+
+def include(arg, namespace=None, app_name=None):
+    if isinstance(arg, tuple):
+        # callable returning a namespace hint
+        if namespace:
+            raise ImproperlyConfigured('Cannot override the namespace for a '
+                                       'dynamic module that provides a '
+                                       'namespace')
+        urlconf_module, app_name, namespace = arg
+    else:
+        # No namespace hint - use manually provided namespace
+        urlconf_module = arg
+
+    if isinstance(urlconf_module, six.string_types):
+        urlconf_module = import_module(urlconf_module)
+
+    if not isinstance(urlconf_module, LocalProxy):
+        # for instances of LocalProxy, skip checks because it may be dependant
+        # on globals which are not available yet
+        patterns = getattr(urlconf_module, 'urlpatterns', urlconf_module)
+
+        # Make sure we can iterate through the patterns (without this, some
+        # testcases will break).
+        if isinstance(patterns, (list, tuple)):
+            for url_pattern in patterns:
+                # Test if the LocaleRegexURLResolver is used within the include;
+                # this should throw an error since this is not allowed!
+                if isinstance(url_pattern, LocaleRegexURLResolver):
+                    raise ImproperlyConfigured(
+                        'Using i18n_patterns in an included URLconf is not allowed.')
+
+    return (urlconf_module, app_name, namespace)
