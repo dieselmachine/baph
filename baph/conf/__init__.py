@@ -11,8 +11,12 @@ from chainmap import ChainMap
 from django.conf import global_settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.functional import LazyObject, empty
+from werkzeug.local import Local, LocalProxy
 
 from baph.core.preconfig.loader import PreconfigLoader
+from baph.utils.module_loading import import_string
+from .loaders import AttrLoader
+from .stack import SettingsStack
 
 
 ENVIRONMENT_VARIABLE = "DJANGO_SETTINGS_MODULE"
@@ -31,6 +35,8 @@ logger = logging.getLogger(__name__)
 #logger.setLevel(logging.INFO)
 #logger.addHandler(handler)
 
+local = Local()
+
 @contextmanager
 def local_path():
   orig = sys.path
@@ -40,78 +46,102 @@ def local_path():
   yield
   sys.path = orig
 
+
 class SettingsMeta(type):
-  def __new__(cls, name, bases, attrs):
-    # overwrite __module__ so django translation utils will
-    # check the correct location for translation files
-    attrs['__module__'] = 'django.conf'
-    return super(SettingsMeta, cls).__new__(cls, name, bases, attrs)
+    def __new__(cls, name, bases, attrs):
+        # overwrite __module__ so django translation utils will
+        # check the correct location for translation files
+        attrs['__module__'] = 'django.conf'
+        return super(SettingsMeta, cls).__new__(cls, name, bases, attrs)
+
 
 class LazySettings(LazyObject):
-  __metaclass__ = SettingsMeta
-  
-  def _setup(self, name=None):
-    settings_module = os.environ.get(ENVIRONMENT_VARIABLE)
-    if not settings_module:
-      desc = ("setting %s" % name) if name else "settings"
-      raise ImproperlyConfigured(
-        "Requested %s, but settings are not configured. "
-        "You must either define the environment variable %s "
-        "or call settings.configure() before accessing settings."
-        % (desc, ENVIRONMENT_VARIABLE))
-    self._wrapped = Settings(settings_module)
+    __metaclass__ = SettingsMeta
+    
+    def _setup(self, name=None):
+        settings_module = os.environ.get(ENVIRONMENT_VARIABLE)
+        if not settings_module:
+          desc = ("setting %s" % name) if name else "settings"
+          raise ImproperlyConfigured(
+            "Requested %s, but settings are not configured. "
+            "You must either define the environment variable %s "
+            "or call settings.configure() before accessing settings."
+            % (desc, ENVIRONMENT_VARIABLE))
+        #self._wrapped = Settings(settings_module)
+        self._wrapped = Settings(settings_module)
 
-  def __repr__(self):
-    # Hardcode the class name as otherwise it yields 'Settings'.
-    if self._wrapped is empty:
-      return '<LazySettings [Unevaluated]>'
-    return '<LazySettings "%(settings_module)s">' % {
-      'settings_module': self._wrapped.SETTINGS_MODULE,
-    }
+        #settings = AttrLoader(Settings(settings_module))
+        '''
+        loaders = settings.get('SETTINGS_LOADERS', None)
+        if loaders:
+          loaders = map(import_string, loaders)
+          print 'loaded %d loaders' % len(loaders)
+        assert False
 
-  def __getattr__(self, name):
-    """Return the value of a setting and cache it in self.__dict__."""
-    if self._wrapped is empty:
-        self._setup(name)
-    val = getattr(self._wrapped, name)
-    self.__dict__[name] = val
-    return val
+        def _get_loaders():
+          if not hasattr(local, 'loaders'):
+              local.loaders = [settings]
+          return local.loaders
+        '''
+        #stack = SettingsStack(settings)
+        #stack.__module__ = 'django.conf'
+        #stack.chainmap.maps = LocalProxy(_get_loaders)
+        #self._wrapped = stack
 
-  def __setattr__(self, name, value):
-    """
-    Set the value of setting. Clear all cached values if _wrapped changes
-    (@override_settings does this) or clear single values when set.
-    """
-    if name == '_wrapped':
-      self.__dict__.clear()
-    else:
-      self.__dict__.pop(name, None)
-    super(LazySettings, self).__setattr__(name, value)
 
-  def __delattr__(self, name):
-    """Delete a setting and clear it from cache if needed."""
-    super(LazySettings, self).__delattr__(name)
-    self.__dict__.pop(name, None)
+    def __repr__(self):
+        # Hardcode the class name as otherwise it yields 'Settings'.
+        if self._wrapped is empty:
+          return '<LazySettings [Unevaluated]>'
+        return '<LazySettings "%(settings_module)s">' % {
+          'settings_module': self._wrapped.SETTINGS_MODULE,
+        }
 
-  def configure(self, default_settings=global_settings, **options):
-    """
-    Called to manually configure the settings. The 'default_settings'
-    parameter sets where to retrieve any unspecified values from (its
-    argument must support attribute access (__getattr__)).
-    """
-    if self._wrapped is not empty:
-      raise RuntimeError('Settings already configured.')
-    holder = UserSettingsHolder(default_settings)
-    for name, value in options.items():
-      setattr(holder, name, value)
-    self._wrapped = holder
+    def __getattr__(self, name):
+        """Return the value of a setting and cache it in self.__dict__."""
+        if self._wrapped is empty:
+            self._setup(name)
+        val = getattr(self._wrapped, name)
+        #self.__dict__[name] = val
+        #print 'getattr:', (name, val)
+        return val
 
-  @property
-  def configured(self):
-    """
-    Returns True if the settings have already been configured.
-    """
-    return self._wrapped is not empty
+    def __setattr__(self, name, value):
+        """
+        Set the value of setting. Clear all cached values if _wrapped changes
+        (@override_settings does this) or clear single values when set.
+        """
+        if name == '_wrapped':
+          self.__dict__.clear()
+        else:
+          self.__dict__.pop(name, None)
+        super(LazySettings, self).__setattr__(name, value)
+
+    def __delattr__(self, name):
+        """Delete a setting and clear it from cache if needed."""
+        super(LazySettings, self).__delattr__(name)
+        self.__dict__.pop(name, None)
+
+    def configure(self, default_settings=global_settings, **options):
+        """
+        Called to manually configure the settings. The 'default_settings'
+        parameter sets where to retrieve any unspecified values from (its
+        argument must support attribute access (__getattr__)).
+        """
+        if self._wrapped is not empty:
+          raise RuntimeError('Settings already configured.')
+        holder = UserSettingsHolder(default_settings)
+        for name, value in options.items():
+          setattr(holder, name, value)
+        self._wrapped = holder
+
+    @property
+    def configured(self):
+        """
+        Returns True if the settings have already been configured.
+        """
+        return self._wrapped is not empty
+
 
 class Settings:
   actions = ('SET', 'APPEND', 'PREPEND', 'UPDATE', 'REPLACE')
@@ -352,53 +382,7 @@ class Settings:
       'settings_module': self.SETTINGS_MODULE,
     }
 
-class UserSettingsHolder:
-  """Holder for user configured settings."""
-  # SETTINGS_MODULE doesn't make much sense in the manually configured
-  # (standalone) case.
-  SETTINGS_MODULE = None
 
-  def __init__(self, default_settings):
-    """
-    Requests for configuration variables not in this class are satisfied
-    from the module specified in default_settings (if possible).
-    """
-    self.__dict__['_deleted'] = set()
-    self.default_settings = default_settings
-
-  def __getattr__(self, name):
-    if name in self._deleted:
-      raise AttributeError
-    return getattr(self.default_settings, name)
-
-  def __setattr__(self, name, value):
-    self._deleted.discard(name)
-    '''
-    if name == 'DEFAULT_CONTENT_TYPE':
-      warnings.warn('The DEFAULT_CONTENT_TYPE setting is deprecated.', RemovedInDjango30Warning)
-    '''
-    super().__setattr__(name, value)
-
-  def __delattr__(self, name):
-    self._deleted.add(name)
-    if hasattr(self, name):
-      super().__delattr__(name)
-
-  def __dir__(self):
-    return sorted(
-      s for s in list(self.__dict__) + dir(self.default_settings)
-      if s not in self._deleted
-    )
-
-  def is_overridden(self, setting):
-    deleted = (setting in self._deleted)
-    set_locally = (setting in self.__dict__)
-    set_on_default = getattr(self.default_settings, 'is_overridden', lambda s: False)(setting)
-    return deleted or set_locally or set_on_default
-
-  def __repr__(self):
-    return '<%(cls)s>' % {
-      'cls': self.__class__.__name__,
-    }
-
-settings = LazySettings()
+base_settings = LazySettings()
+loader = AttrLoader(base_settings)
+settings = SettingsStack(loader)

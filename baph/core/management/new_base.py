@@ -13,6 +13,8 @@ from django.utils.six import StringIO
 
 from baph.core.preconfig.loader import PreconfigLoader
 from baph.core.management.utils import get_command_options, get_parser_options
+from baph.core.wsgi import get_wsgi_application
+from baph.globals import current_app
 from .base import CommandError
 
 
@@ -276,13 +278,15 @@ class BaseCommand(base.BaseCommand):
 
         base.handle_default_options(options)
 
-        try:
-            self.execute(*args, **cmd_options)
-        except Exception as e:
-            if options.traceback or not isinstance(e, base.CommandError):
-                raise
-            self.stderr.write('%s: %s' % (e.__class__.__name__, e))
-            sys.exit(1)
+        app = get_wsgi_application()
+        with app.app_context():
+            try:
+                self.execute(*args, **cmd_options)
+            except Exception as e:
+                if options.traceback or not isinstance(e, base.CommandError):
+                    raise
+                self.stderr.write('%s: %s' % (e.__class__.__name__, e))
+                sys.exit(1)
 
     def execute(self, *args, **options):
         """

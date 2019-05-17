@@ -5,6 +5,7 @@ def setup():
 
     configure_logging(settings.LOGGING_CONFIG, settings.LOGGING)
     apps.populate(settings.INSTALLED_APPS)
+    replace_user_settings()
 
 
 def replace_settings_class():
@@ -22,6 +23,13 @@ def replace_wsgi_handler():
     from django.core.handlers import wsgi
     from baph.core.handlers.wsgi import WSGIHandler
     wsgi.WSGIHandler = WSGIHandler
+
+
+def replace_user_settings():
+    from django.test import utils
+    from baph.conf.utils import UserSettingsHolder, override_settings
+    #utils.override_settings = override_settings
+    utils.UserSettingsHolder = UserSettingsHolder
 
 
 def apply_patches():

@@ -43,6 +43,8 @@ def Deserializer(object_list, **options):
     stream or a string) to the constructor
     """
     db = options.pop('using', DEFAULT_DB_ALIAS)
+    ignore = options.pop('ignorenonexistent', False)
+
     get_apps()
     for d in object_list:
         # Look up the model and starting build a dict of data for it.
@@ -58,8 +60,9 @@ def Deserializer(object_list, **options):
                     options.get("encoding", settings.DEFAULT_CHARSET), 
                     strings_only=True)
             data[field_name] = field_value
-
+        #print 'model:', Model
         yield Model(**data)
+
 
 def _get_model(model_identifier):
     """

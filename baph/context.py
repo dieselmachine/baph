@@ -1,50 +1,43 @@
 import sys
-from importlib import import_module
 
 from baph.apps import apps
-from django.utils.module_loading import module_has_submodule
 from werkzeug.local import Local, LocalProxy, LocalManager
 
-from .globals import _request_ctx_stack, _app_ctx_stack
 from ._compat import BROKEN_PYPY_CTXMGR_EXIT
+from .globals import _request_ctx_stack, _app_ctx_stack, current_app, g
 
-
-local = Local()
 
 _sentinel = object()
 
 
-class _LocalProxy(LocalProxy):
-    pass
+def context_global2(cache=False, add_to_env=False):
+    def inner(func):
+        #print 'inner:', repr(func)
+        name = func.__name__
+        if cache:
+            def inner2():
+                if not current_app:
+                    assert False
+                    return func()
+                if name not in g:
+                    value = func()
+                    #print '  setting', name, 'to', value
+                    setattr(g, name, value)
+                return getattr(g, name)
+        else:
+            inner2 = func
+        proxy = LocalProxy(inner2)
+        _AppCtxGlobals.register_global(name, proxy)
+        if add_to_env:
+            from coffin.common import env
+            env.globals[name] = proxy
+        return proxy
+    return inner
 
-
-def context_global(func):
-    name = func.__name__
-    def inner():
-        if not hasattr(local, name):
-            setattr(local, name, func())
-        return getattr(local, name)
-    return _LocalProxy(inner)
-
-
-def collect_globals():
-    """
-    checks each app in INSTALLED_APPS for a globals.py file, collects all
-    @context_globals in those files, and returns a dict of globals
-    """
-    _globals = {}
-    for app in apps.get_app_configs():
-        if module_has_submodule(app.module, 'globals'):
-            module_name = '%s.%s' % (app.name, 'globals')
-            module = import_module(module_name)
-            for k, v in module.__dict__.items():
-                if isinstance(v, _LocalProxy):
-                    _globals[k] = v
-    return _globals
-
-
+'''
 def set_global(name, value):
     setattr(local, name, value)
+'''
 
 
 def set_globals(**kwargs):
@@ -68,13 +61,24 @@ def clear_globals(*names):
 
 
 class _AppCtxGlobals(object):
+
     def __init__(self):
-        from coffin.common import env
-        g = collect_globals()
-        self.__dict__.update(g)
-        env.globals.update(g)
+        #print '_AppCtxGlobals.__init__:'
+        #print '  app ctx globals id:', id(self)
+        self.cache = {}
+
+    @property
+    def _id(self):
+        return id(self)
+
+    @classmethod
+    def register_global(cls, name, func):
+        setattr(cls, name, func)
+        #cls._globals[name] = func
 
     def get(self, name, default=None):
+        if name in self.cache:
+            return self.cache[name]
         return self.__dict__.get(name, default)
 
     def pop(self, name, default=_sentinel):
@@ -103,13 +107,14 @@ class AppContext(object):
     def __init__(self, app):
         self.app = app
         self.g = app.app_ctx_globals_class()
-
         # Like request context, app contexts can be pushed multiple times
         # but there a basic "refcount" is enough to track them.
         self._refcnt = 0
 
     def push(self):
         """Binds the app context to the current context."""
+        #print 'AppContext.push'
+        #assert False
         self._refcnt += 1
         if hasattr(sys, 'exc_clear'):
             sys.exc_clear()
@@ -117,6 +122,7 @@ class AppContext(object):
 
     def pop(self, exc=_sentinel):
         """Pops the app context."""
+        #print 'AppContext.pop'
         try:
             self._refcnt -= 1
             if self._refcnt <= 0:
@@ -143,6 +149,7 @@ class AppContext(object):
 class RequestContext(object):
 
     def __init__(self, app, environ, request=None):
+        #print 'new req context'
         self.app = app
         if request is None:
             request = app.request_class(environ)
@@ -182,6 +189,7 @@ class RequestContext(object):
 
     def push(self):
         #print 'push req ctx', id(self)
+        #print 'RequestContext.push'
         top = _request_ctx_stack.top
         if top is not None and top.preserved:
             top.pop(top._preserved_exc)
@@ -222,6 +230,7 @@ class RequestContext(object):
            Added the `exc` argument.
         """
         #print 'pop req ctx', id(self)
+        #print 'RequestContext.pop'
         app_ctx = self._implicit_app_ctx_stack.pop()
 
         try:

@@ -443,6 +443,9 @@ def get_declarative_base(**kwargs):
 @event.listens_for(mapper, 'after_update')
 @event.listens_for(mapper, 'after_delete')
 def kill_cache(mapper, connection, target):
+  from baph.globals import current_app
+  if not current_app:
+    return
   if not getattr(settings, 'CACHE_ENABLED', False):
     return
   if not target.is_cacheable:

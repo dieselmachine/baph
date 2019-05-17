@@ -30,11 +30,24 @@ class BaseHandler(base.BaseHandler):
         self.debug = getattr(settings, 'DEBUG', False)
         self.testing = getattr(settings, 'IS_TEST', False)
 
+    @property
+    def preserve_context_on_exception(self):
+        """Returns the value of the ``PRESERVE_CONTEXT_ON_EXCEPTION``
+        configuration value in case it's set, otherwise a sensible default
+        is returned.
+        .. versionadded:: 0.7
+        """
+        #rv = self.config['PRESERVE_CONTEXT_ON_EXCEPTION']
+        rv = getattr(settings, 'PRESERVE_CONTEXT_ON_EXCEPTION', None)
+        if rv is not None:
+            return rv
+        return self.debug
+
     def app_context(self):
         return AppContext(self)
 
-    def request_context(self, environ):
-        return RequestContext(self, environ)
+    def request_context(self, environ=None, request=None):
+        return RequestContext(self, environ, request)
 
     def should_ignore_error(self, error):
         return False

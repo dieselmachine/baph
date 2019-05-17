@@ -1,8 +1,10 @@
 import threading
 from collections import Counter, OrderedDict, defaultdict
 
+from django.conf import settings
 from functools32 import lru_cache
 
+from baph.utils.module_loading import import_string
 from .config import AppConfig
 
 
@@ -63,10 +65,21 @@ class Apps(object):
       self.clear_cache()
       self.models_ready = True
 
+      self.run_loaders()
+
       for app_config in self.get_app_configs():
         app_config.ready()
 
       self.ready = True
+
+  def run_loaders(self):
+      paths = getattr(settings, 'APP_LOADERS', [])
+      loaders = map(import_string, paths)
+      map(self.run_loader, loaders)
+
+  def run_loader(self, loader):
+      for app_config in self.get_app_configs():
+          loader.load_app(app_config)
 
   def check_apps_ready(self):
     """

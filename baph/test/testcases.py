@@ -1,5 +1,4 @@
 from collections import defaultdict
-import json
 import time
 
 from django.conf import settings
@@ -12,14 +11,18 @@ from sqlalchemy.orm.session import Session
 from sqlalchemy.orm import sessionmaker
 
 from baph.core.management import call_command
+from baph.core.wsgi import get_wsgi_application
 from baph.db.orm import ORM
+
+from .client import Client
 from .signals import add_timing
 
 
 PRINT_TEST_TIMINGS = getattr(settings, 'PRINT_TEST_TIMINGS', False)
 
-#Session = sessionmaker()
+
 orm = ORM.get()
+
 
 class BaphFixtureMixin(object):
     reset_sequences = False
@@ -203,7 +206,12 @@ class BaphFixtureMixin(object):
 
     def run(self, *args, **kwargs):
         type(self).tests_run += 1
-        super(BaphFixtureMixin, self).run(*args, **kwargs)
+        '''
+        app = get_wsgi_application()
+        with app.app_context():
+            return super(BaphFixtureMixin, self).run(*args, **kwargs)
+        '''
+        return super(BaphFixtureMixin, self).run(*args, **kwargs)
 
     @classmethod
     def print_timings(cls):
@@ -429,11 +437,11 @@ class MemcacheMixin(object):
 
 
 class TestCase(BaphFixtureMixin, test.TestCase):
-    pass
+    client_class = Client
 
 
 class LiveServerTestCase(BaphFixtureMixin, test.LiveServerTestCase):
-    pass
+    client_class = Client
 
 
 class MemcacheTestCase(MemcacheMixin, TestCase):
@@ -445,6 +453,7 @@ class MemcacheTestCase(MemcacheMixin, TestCase):
         self.initial = {}
         super(MemcacheTestCase, self).setUp()
 
+
 class MemcacheLSTestCase(MemcacheMixin, LiveServerTestCase):
     def _fixture_setup(self):
         super(MemcacheLSTestCase, self)._fixture_setup()
@@ -453,5 +462,3 @@ class MemcacheLSTestCase(MemcacheMixin, LiveServerTestCase):
     def setUp(self, objs={}, counts={}):
         self.initial = {}
         super(MemcacheLSTestCase, self).setUp()
-
-
