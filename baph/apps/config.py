@@ -83,6 +83,7 @@ class AppConfig(object):
     """
     Factory that creates an app config from an entry in INSTALLED_APPS.
     """
+    print 'create:', (cls, entry)
     try:
       # If import_module succeeds, entry is a path to an app module,
       # which may specify an app config class with default_app_config.
