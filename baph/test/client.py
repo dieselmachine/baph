@@ -48,14 +48,10 @@ class ClientHandler(BaseHandler):
         return self.wsgi_app(environ)
 
 
-client_handler = ClientHandler()
-
-
 class Client(DjangoClient):
     def __init__(self, enforce_csrf_checks=False, **defaults):
         super(DjangoClient, self).__init__(**defaults)
-        #self.handler = ClientHandler(enforce_csrf_checks)
-        self.handler = client_handler
+        self.handler = ClientHandler(enforce_csrf_checks)
         self.exc_info = None
 
     def store_exc_info(self, **kwargs):
