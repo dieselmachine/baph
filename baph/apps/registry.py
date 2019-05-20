@@ -34,7 +34,6 @@ class Apps(object):
 
       # Load app configs and app modules.
       for entry in installed_apps:
-        print 'entry:', entry
         if isinstance(entry, AppConfig):
           app_config = entry
         else:
