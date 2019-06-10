@@ -200,18 +200,20 @@ class BaphFixtureMixin(object):
         #    self.purge_fixtures(*self.fixtures)
     '''
 
+    @property
+    def app(self):
+        if not hasattr(self, '_app'):
+            self._app = get_wsgi_application()
+        return self._app
+
     @classmethod
     def add_timing(cls, sender, key, time, **kwargs):
         cls.timings[key].append(time)
 
     def run(self, *args, **kwargs):
         type(self).tests_run += 1
-        '''
-        app = get_wsgi_application()
-        with app.app_context():
+        with self.app.app_context():
             return super(BaphFixtureMixin, self).run(*args, **kwargs)
-        '''
-        return super(BaphFixtureMixin, self).run(*args, **kwargs)
 
     @classmethod
     def print_timings(cls):
