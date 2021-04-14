@@ -4,7 +4,6 @@ from django.core.urlresolvers import set_urlconf, RegexURLPattern
 from baph.utils.module_loading import import_string
 
 from .base import BaseHandler
-
 #from .utils import get_resolver
 
 

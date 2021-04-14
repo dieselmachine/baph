@@ -19,7 +19,6 @@ from .exception import (
     handle_uncaught_exception,
 )
 
-
 logger = logging.getLogger('django.request')
 
 
