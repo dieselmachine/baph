@@ -1,10 +1,12 @@
+from functools import partial
 import sys
 
 from baph.apps import apps
 from werkzeug.local import Local, LocalProxy, LocalManager
 
 from ._compat import BROKEN_PYPY_CTXMGR_EXIT
-from .globals import _request_ctx_stack, _app_ctx_stack, current_app, g
+from .globals import (_app_ctx_stack, current_app, g, _lookup_req_object,
+                      _request_ctx_stack)
 
 
 _sentinel = object()
@@ -38,6 +40,27 @@ def context_global2(cache=False, add_to_env=False):
 def set_global(name, value):
     setattr(local, name, value)
 '''
+
+def request_global(func):
+    name = func.__name__
+
+    def _get(self):
+        if name not in self.__dict__:
+            self.__dict__[name] = func()
+        return self.__dict__[name]
+
+    def _set(self, value):
+        self.__dict__[name] = value
+
+    def _del(self):
+        del self.__dict__[name]
+
+    setattr(RequestContext, name, property(_get, _set, _del))
+    proxy = LocalProxy(partial(_lookup_req_object, name))
+    _AppCtxGlobals.register_global(name, proxy)
+    from coffin.common import env
+    env.globals[name] = proxy
+    return proxy
 
 
 def set_globals(**kwargs):
@@ -113,7 +136,7 @@ class AppContext(object):
 
     def push(self):
         """Binds the app context to the current context."""
-        #print 'AppContext.push'
+        print 'AppContext.push'
         #assert False
         self._refcnt += 1
         if hasattr(sys, 'exc_clear'):
@@ -122,7 +145,7 @@ class AppContext(object):
 
     def pop(self, exc=_sentinel):
         """Pops the app context."""
-        #print 'AppContext.pop'
+        print 'AppContext.pop'
         try:
             self._refcnt -= 1
             if self._refcnt <= 0:
@@ -177,6 +200,11 @@ class RequestContext(object):
             request=self.request
         )
 
+    @classmethod
+    def register_global(cls, name, func):
+        setattr(cls, name, func)
+        #cls._globals[name] = func
+
     '''
     def match_request(self):
         try:
@@ -188,7 +216,7 @@ class RequestContext(object):
     '''
 
     def push(self):
-        #print 'push req ctx', id(self)
+        print 'push req ctx', id(self)
         #print 'RequestContext.push'
         top = _request_ctx_stack.top
         if top is not None and top.preserved:
@@ -229,7 +257,7 @@ class RequestContext(object):
         .. versionchanged:: 0.9
            Added the `exc` argument.
         """
-        #print 'pop req ctx', id(self)
+        print 'pop req ctx', id(self)
         #print 'RequestContext.pop'
         app_ctx = self._implicit_app_ctx_stack.pop()
 
