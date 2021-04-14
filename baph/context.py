@@ -1,7 +1,7 @@
 from functools import partial
 import sys
 
-from baph.apps import apps
+#from baph.apps import apps
 from werkzeug.local import Local, LocalProxy, LocalManager
 
 from ._compat import BROKEN_PYPY_CTXMGR_EXIT

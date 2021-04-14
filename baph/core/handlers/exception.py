@@ -8,7 +8,7 @@ from functools import wraps
 from django.conf import settings
 from django.core import signals
 from django.core.exceptions import PermissionDenied, SuspiciousOperation
-from django.core.urlresolvers import get_urlconf, RegexURLResolver
+from django.core.urlresolvers import get_callable, get_urlconf, RegexURLResolver
 from django.http import Http404
 from django.http.multipartparser import MultiPartParserError
 from django.utils.decorators import available_attrs
@@ -18,11 +18,13 @@ import six
 
 logger = logging.getLogger('django.request')
 
+
 def get_resolver(urlconf=None):
-  if urlconf is None:
-    from django.conf import settings
-    urlconf = settings.ROOT_URLCONF
-  return RegexURLResolver(r'^/', urlconf)
+    if urlconf is None:
+        from django.conf import settings
+        urlconf = settings.ROOT_URLCONF
+    return RegexURLResolver(r'^/', urlconf)
+
 
 def convert_exception_to_response(get_response):
     """
@@ -96,15 +98,31 @@ def response_for_exception(request, exc):
     return response
 
 
+def resolve_error_handler(resolver, view_type):
+    callback = getattr(resolver.urlconf_module, 'handler%s' % view_type, None)
+    if not callback:
+        from django.conf import urls
+        callback = getattr(urls, 'handler%s' % view_type)
+    return get_callable(callback), {}
+
+
 def get_exception_response(request, resolver, status_code, exception, sender=None):
+    print '\nget exc response'
+    #assert False
+    print '  request:', type(request)
+    print '  resolver id:', id(resolver)
+    print '  handler404:', getattr(resolver, 'handler404', None)
+    print '  status code:', status_code
+    print '  exception:', exception
     try:
-        callback, param_dict = resolver._resolve_special(status_code)
+        callback, param_dict = resolve_error_handler(resolver, status_code)
         # Unfortunately, inspect.getargspec result is not trustable enough
         # depending on the callback wrapping in decorators (frequent for handlers).
         # Falling back on try/except:
+        print '  callback:', callback
         try:
             response = callback(request, **dict(param_dict, exception=exception))
-        except TypeError:
+        except TypeError as e:
             warnings.warn(
                 "Error handlers should accept an exception parameter. Update "
                 "your code as this parameter will be required in Django 2.0",

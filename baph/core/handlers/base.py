@@ -6,9 +6,10 @@ import types
 import warnings
 
 from django.conf import settings
-from django.core import signals
+from django.core import signals, urlresolvers
 from django.core.exceptions import ImproperlyConfigured, MiddlewareNotUsed
-from django.core.urlresolvers import get_resolver, set_urlconf, RegexURLResolver
+from django.core.urlresolvers import (get_resolver, get_urlconf,
+                                      RegexURLResolver, set_urlconf)
 from django.db import connections, transaction
 from django.utils import six
 from baph.utils.module_loading import import_string
@@ -17,7 +18,7 @@ from .exception import (
     convert_exception_to_response, get_exception_response,
     handle_uncaught_exception,
 )
-#from utils import get_resolver
+
 
 logger = logging.getLogger('django.request')
 
@@ -88,15 +89,16 @@ class BaseHandler(object):
     return view
 
   def get_exception_response(self, request, resolver, status_code, exception):
+    print '\nget_exception_response:'
     return get_exception_response(request, resolver, status_code, exception,
                                   self.__class__)
 
   def get_response(self, request):
     """Return an HttpResponse object for the given HttpRequest."""
     # Setup default url resolver for this thread
-    print '\nproxy handler.get response'
+    print 'basehandler.get_response'
     urlconf = getattr(settings, self.urlconf_setting_key)
-    set_urlconf(urlconf)
+    urlresolvers.set_urlconf(urlconf)
 
     print 'middleware start'
     response = self._middleware_chain(request)
@@ -119,8 +121,9 @@ class BaseHandler(object):
 
   def get_resolver(self, urlconf=None):
     if urlconf is None:
-      from django.conf import settings
-      urlconf = getattr(settings, self.urlconf_setting_key)
+        from django.conf import settings
+        urlconf = getattr(settings, self.urlconf_setting_key)
+    print 'urlconf:', urlconf
     return get_resolver(urlconf)
 
   def _get_response(self, request):
@@ -131,18 +134,21 @@ class BaseHandler(object):
     """
     print '\nproxy handler _get_response'
     response = None
-
+    print '\n_get_response:'
     if hasattr(request, 'urlconf'):
-      urlconf = request.urlconf
-      set_urlconf(urlconf)
-      resolver = self.get_resolver(urlconf)
+        print '  using request urlconf'
+        urlconf = request.urlconf
+        print '  urlconf:', urlconf
+        set_urlconf(urlconf)
+        resolver = self.get_resolver(urlconf)
     else:
-      resolver = self.get_resolver()
-    print 'resolver:', resolver
-    print resolver.urlconf_module.urlpatterns
-    print 'path:', (request.path_info, request.path)
+        print '  getting default resolver'
+        resolver = self.get_resolver()
 
+    print '  resolver id:', id(resolver)
+    print '  resolver.handler404:', getattr(resolver, 'handler404', None)
     resolver_match = resolver.resolve(request.path_info)
+    print '  match:', resolver_match
     callback, callback_args, callback_kwargs = resolver_match
     request.resolver_match = resolver_match
 
