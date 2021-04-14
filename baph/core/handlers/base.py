@@ -8,7 +8,7 @@ import warnings
 from django.conf import settings
 from django.core import signals
 from django.core.exceptions import ImproperlyConfigured, MiddlewareNotUsed
-from django.core.urlresolvers import get_urlconf, set_urlconf, RegexURLResolver
+from django.core.urlresolvers import get_resolver, set_urlconf, RegexURLResolver
 from django.db import connections, transaction
 from django.utils import six
 from baph.utils.module_loading import import_string
@@ -17,7 +17,7 @@ from .exception import (
     convert_exception_to_response, get_exception_response,
     handle_uncaught_exception,
 )
-from utils import get_resolver
+#from utils import get_resolver
 
 logger = logging.getLogger('django.request')
 
@@ -94,10 +94,13 @@ class BaseHandler(object):
   def get_response(self, request):
     """Return an HttpResponse object for the given HttpRequest."""
     # Setup default url resolver for this thread
+    print '\nproxy handler.get response'
     urlconf = getattr(settings, self.urlconf_setting_key)
     set_urlconf(urlconf)
 
+    print 'middleware start'
     response = self._middleware_chain(request)
+    print 'middleware end'
     response._closable_objects.append(request)
 
     # If the exception handler returns a TemplateResponse that has not
@@ -126,6 +129,7 @@ class BaseHandler(object):
     template_response middleware. This method is everything that happens
     inside the request/response middleware.
     """
+    print '\nproxy handler _get_response'
     response = None
 
     if hasattr(request, 'urlconf'):
@@ -134,6 +138,9 @@ class BaseHandler(object):
       resolver = self.get_resolver(urlconf)
     else:
       resolver = self.get_resolver()
+    print 'resolver:', resolver
+    print resolver.urlconf_module.urlpatterns
+    print 'path:', (request.path_info, request.path)
 
     resolver_match = resolver.resolve(request.path_info)
     callback, callback_args, callback_kwargs = resolver_match

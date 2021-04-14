@@ -98,7 +98,7 @@ def response_for_exception(request, exc):
 
 def get_exception_response(request, resolver, status_code, exception, sender=None):
     try:
-        callback, param_dict = resolver.resolve_error_handler(status_code)
+        callback, param_dict = resolver._resolve_special(status_code)
         # Unfortunately, inspect.getargspec result is not trustable enough
         # depending on the callback wrapping in decorators (frequent for handlers).
         # Falling back on try/except:
