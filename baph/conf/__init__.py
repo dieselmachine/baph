@@ -8,6 +8,10 @@ import os
 import pkgutil
 import sys
 
+try:
+    from collections import ChainMap
+except ImportError:
+    from chainmap import ChainMap
 from django.conf import global_settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.functional import LazyObject, empty
