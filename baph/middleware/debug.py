@@ -8,9 +8,12 @@
 '''
 
 from __future__ import absolute_import
-from coffin.common import env
 from django.conf import settings
 from django.http import HttpResponse, HttpResponseServerError
+from django_jinja.backend import Jinja2
+
+
+env = Jinja2.get_default().env
 
 ERROR_PAGE = u'''\
 <!DOCTYPE html>

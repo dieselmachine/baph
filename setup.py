@@ -8,13 +8,12 @@ from setuptools import find_packages
 setup(name='baph',
       version='0.3.4',
       install_requires=[
-          'Coffin',
-          'Django >= 1.5',
+          'Django >= 1.8.19',
+          'django-jinja == 2.4.1',
           'funcy',
           'SQLAlchemy >= 0.9.0',
           'python-dotenv == 0.7.1',
           'functools32 == 3.2.3.post2; python_version < "3.0"',
-          'chainmap == 1.0.2',
       ],
       include_package_data=True,
       package_data={

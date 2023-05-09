@@ -8,11 +8,12 @@ import django
 from django.conf import settings
 from django.core import management
 from django.core.exceptions import ImproperlyConfigured
-from django.core.management import get_commands, load_command_class
+from django.core.management import find_commands, load_command_class
 from django.utils import autoreload
+from django.utils import lru_cache
 
 import baph
-from baph.apps import apps
+from django.apps import apps
 from baph.core.management.base import (
   BaseCommand, CommandError, handle_default_options)
 from baph.core.preconfig.loader import PreconfigLoader
@@ -25,6 +26,38 @@ def get_subcommand(args):
     if arg and arg[0] != '-':
       return arg
   return 'help'
+
+
+@lru_cache.lru_cache(maxsize=None)
+def get_commands():
+    """
+    Returns a dictionary mapping command names to their callback applications.
+    This works by looking for a management.commands package in django.core, and
+    in each installed application -- if a commands package exists, all commands
+    in that package are registered.
+    Core commands are always included. If a settings module has been
+    specified, user-defined commands will also be included.
+    The dictionary is in the format {command_name: app_name}. Key-value
+    pairs from this dictionary can then be used in calls to
+    load_command_class(app_name, command_name)
+    If a specific version of a command must be loaded (e.g., with the
+    startapp command), the instantiated module can be placed in the
+    dictionary in place of the application name.
+    The dictionary is cached on the first call and reused on subsequent
+    calls.
+    """
+    #from baph.apps import apps
+    commands = {name: 'baph.core' for name in find_commands(__path__[0])}
+
+    if not settings.configured:
+        return commands
+
+    for app_config in reversed(list(apps.get_app_configs())):
+        path = os.path.join(app_config.path, 'management')
+        commands.update({name: app_config.name for name in find_commands(path)})
+
+    return commands
+
 
 def call_command(command_name, *args, **options):
   preconfig = PreconfigLoader.load()
@@ -154,6 +187,28 @@ class ManagementUtility(management.ManagementUtility):
     else:
       command = self.fetch_command(subcommand)
       command.run_from_argv(self.argv)
+
+  def fetch_command(self, subcommand):
+      """
+      Tries to fetch the given subcommand, printing a message with the
+      appropriate command called from the command line (usually
+      "django-admin.py" or "manage.py") if it can't be found.
+      """
+      # Get commands outside of try block to prevent swallowing exceptions
+      commands = get_commands()
+      try:
+          app_name = commands[subcommand]
+      except KeyError:
+          sys.stderr.write("Unknown command: %r\nType '%s help' for usage.\n" %
+              (subcommand, self.prog_name))
+          sys.exit(1)
+      if isinstance(app_name, BaseCommand):
+          # If the command is already loaded, use it directly.
+          klass = app_name
+      else:
+          klass = load_command_class(app_name, subcommand)
+      return klass
+
 
 def execute_from_command_line(argv=None):
   """

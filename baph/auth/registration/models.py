@@ -1,9 +1,9 @@
 from __future__ import absolute_import
 import datetime
 
-from coffin.shortcuts import render_to_string
 from django.conf import settings as django_settings
 from django.core.mail import send_mail
+from django.template.loader import render_to_string
 from sqlalchemy import *
 from sqlalchemy.orm import relationship, backref, joinedload
 

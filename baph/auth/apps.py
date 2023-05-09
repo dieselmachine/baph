@@ -1,5 +1,5 @@
 from __future__ import absolute_import
-from baph.apps import AppConfig
+from django.apps import AppConfig
 
 
 class AuthConfig(AppConfig):

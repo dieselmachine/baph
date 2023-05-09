@@ -18,6 +18,10 @@ from baph.db.orm import ORM
 from .signals import add_timing
 
 
+if not hasattr(test.TestCase, 'assertItemsEqual'):
+    test.TestCase.assertItemsEqual = test.TestCase.assertCountEqual
+
+
 PRINT_TEST_TIMINGS = getattr(settings, 'PRINT_TEST_TIMINGS', False)
 
 #Session = sessionmaker()
@@ -299,11 +303,11 @@ class BaphFixtureMixin(object):
         super(BaphFixtureMixin, self).tearDown()
     '''
     def _fixture_setup(self):
-        if hasattr(self, 'fixtures'):
+        if hasattr(self, 'fixtures') and self.fixtures:
             self.load_fixtures(*self.fixtures)
 
     def _fixture_teardown(self):
-        if hasattr(self, 'fixtures'):
+        if hasattr(self, 'fixtures')  and self.fixtures:
             self.purge_fixtures(*self.fixtures)
 
     def assertItemsOrderedBy(self, items, field):

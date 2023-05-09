@@ -7,10 +7,10 @@ from django.core.management import call_command
 from django.core.management.color import no_style
 from django.utils.importlib import import_module
 
+from django.apps import apps
 from baph.core.management.new_base import BaseCommand, CommandError
 from baph.core.management.sql import emit_post_sync_signal
 from baph.db import ORM, DEFAULT_DB_ALIAS
-from baph.db.models import signals, get_apps, get_models
 from six.moves import input
 
 
@@ -80,15 +80,7 @@ Are you sure you want to do this?
                 session.execute('set foreign_key_checks=1')
                 session.commit()
 
-            # Emit the post sync signal. This allows individual
-            # applications to respond as if the database had been
-            # sync'd from scratch.
-            all_models = []
-            for app in get_apps():
-                all_models.extend([
-                    m for m in get_models(app, include_auto_created=True)
-                ])
-            emit_post_sync_signal(set(all_models), verbosity, interactive, None) 
+            self.emit_post_migrate(verbosity, interactive, None)
 
             # Reinstall the initial_data fixture.
             if options.get('load_initial_data'):
@@ -97,3 +89,10 @@ Are you sure you want to do this?
 
         else:
             self.stdout.write("Flush cancelled.\n")
+
+    @staticmethod
+    def emit_post_migrate(verbosity, interactive, database):
+        # Emit the post migrate signal. This allows individual applications to
+        # respond as if the database had been migrated from scratch.
+        all_models = apps.get_models(include_auto_created=True)
+        emit_post_sync_signal(set(all_models), verbosity, interactive, database)

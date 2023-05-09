@@ -28,6 +28,7 @@ from django.utils.functional import cached_property, memoize
 from sqlalchemy.orm.attributes import instance_dict
 from sqlalchemy.orm.session import Session
 
+from django.apps import apps
 from baph.core.management.new_base import BaseCommand
 from baph.db import DEFAULT_DB_ALIAS
 from baph.db.models import get_app_paths
@@ -342,35 +343,25 @@ class Command(BaseCommand):
 
     @cached_property
     def fixture_dirs(self):
-      """
-      Return a list of fixture directories.
+        """
+        Return a list of fixture directories.
 
-      The list contains the 'fixtures' subdirectory of each installed
-      application, if it exists, the directories in FIXTURE_DIRS, and the
-      current directory.
-      """
-      dirs = []
-      fixture_dirs = settings.FIXTURE_DIRS
-      if len(fixture_dirs) != len(set(fixture_dirs)):
-        raise ImproperlyConfigured("settings.FIXTURE_DIRS contains "
-                                  "duplicates.")
-      for path in get_app_paths():
-        app_dir = os.path.join(os.path.dirname(path), 'fixtures')
-        if app_dir in fixture_dirs:
-          raise ImproperlyConfigured(
-            "'%s' is a default fixture directory for the '%s' app "
-            "and cannot be listed in settings.FIXTURE_DIRS." 
-            % (app_dir, app_label)
-          )
+        The list contains the 'fixtures' subdirectory of each installed
+        application, if it exists, the directories in FIXTURE_DIRS, and the
+        current directory.
+        """
+        dirs = []
+        for app_config in apps.get_app_configs():
+            if self.app_label and app_config.label != self.app_label:
+                continue
+            app_dir = os.path.join(app_config.path, 'fixtures')
+            if os.path.isdir(app_dir):
+                dirs.append(app_dir)
+        dirs.extend(list(settings.FIXTURE_DIRS))
+        dirs.append('')
+        dirs = [upath(os.path.abspath(os.path.realpath(d))) for d in dirs]
+        return dirs
 
-        if self.app_label and app_label != self.app_label:
-            continue
-        if os.path.isdir(app_dir):
-          dirs.append(app_dir)
-      dirs.extend(list(fixture_dirs))
-      dirs.append('')
-      dirs = [upath(os.path.abspath(os.path.realpath(d))) for d in dirs]
-      return dirs
 
     def parse_name(self, fixture_name):
         """

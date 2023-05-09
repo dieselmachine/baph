@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 '''Views which allow users to create and activate accounts.'''
 from __future__ import absolute_import
-from coffin.shortcuts import render_to_response, redirect
-from coffin.template import RequestContext
+
 from django.conf import settings as django_settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, REDIRECT_FIELD_NAME
 from django.core.urlresolvers import reverse
 from django.forms import Form
 from django.http import HttpResponseRedirect, HttpResponseForbidden
+from django.shortcuts import redirect, render
 from django.utils.translation import ugettext as _
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -60,8 +60,8 @@ def signup(request, signup_form=SignupForm,
 
     if not extra_context: extra_context = dict()
     extra_context['form'] = form
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
+
 
 @secure_required
 def activate(request, activation_key,
@@ -75,8 +75,7 @@ def activate(request, activation_key,
         .first()
     if not signup:
         if not extra_context: extra_context = dict()
-        return render_to_response(template_name, extra_context,
-            context_instance=RequestContext(request))
+        return render(request, template_name, extra_context)
     if (not signup.activation_key_expired() 
         or not settings.BAPH_ACTIVATION_RETRY):
         user = SignupManager.activate_user(activation_key)
@@ -93,13 +92,12 @@ def activate(request, activation_key,
             return redirect(redirect_to)
         else:
             if not extra_context: extra_context = dict()
-            return render_to_response(template_name, extra_context,
-                context_instance=RequestContext(request))
+            return render(request, template_name, extra_context)
     else:
         if not extra_context: extra_context = dict()
         extra_context['activation_key'] = activation_key
-        return render_to_response(retry_template_name, extra_context,
-            context_instance=RequestContext(request))
+        return render(request, retry_template_name, extra_context)
+
 
 @secure_required
 def activate_retry(request, activation_key,
@@ -135,8 +133,7 @@ def activate_retry(request, activation_key,
             new_key = SignupManager.reissue_activation(activation_key)
             if new_key:
                 if not extra_context: extra_context = dict()
-                return render_to_response(template_name, extra_context,
-                    context_instance=RequestContext(request))
+                return render(request, template_name, extra_context)
             else:
                 return redirect(reverse('baph_activate', args=(activation_key,)))
         else:
@@ -220,8 +217,7 @@ def signin(request, auth_form=AuthenticationForm,
         'form': form,
         'next': request.REQUEST.get(redirect_field_name),
     })
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 @secure_required
 def signout(request, next_page=settings.BAPH_REDIRECT_ON_SIGNOUT,
@@ -247,19 +243,16 @@ def signout(request, next_page=settings.BAPH_REDIRECT_ON_SIGNOUT,
 def signup_complete(request, template_name='registration/signup_complete.html',
                      extra_context=None):
     if not extra_context: extra_context = dict()
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 def direct_to_template(request, template_name=None, extra_context=None):
     if not extra_context: extra_context = dict()
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 def direct_to_user_template(request, template_name=None, extra_context=None):
     if not extra_context: extra_context = dict()
     extra_context['viewed_user'] = request.user
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 @secure_required
 def email_change(request, email_form=ChangeEmailForm,
@@ -324,8 +317,7 @@ def email_change(request, email_form=ChangeEmailForm,
 
     if not extra_context: extra_context = dict()
     extra_context['form'] = form
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 @secure_required
 def password_change(request, template_name='registration/password_form.html',
@@ -387,8 +379,7 @@ def password_change(request, template_name='registration/password_form.html',
 
     if not extra_context: extra_context = dict()
     extra_context['form'] = form
-    return render_to_response(template_name, extra_context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, extra_context)
 
 @secure_required
 def email_confirm(request, confirmation_key,
@@ -432,6 +423,5 @@ def email_confirm(request, confirmation_key,
         return redirect(redirect_to)
     else:
         if not extra_context: extra_context = dict()
-        return render_to_response(template_name, extra_context,
-            context_instance=RequestContext(request))
+        return render(request, template_name, extra_context)
 

@@ -1,9 +1,5 @@
 from __future__ import absolute_import
-try:
-    from coffin.conf.urls.defaults import *
-except:
-    from coffin.conf.urls import *
-    
+from django.conf.urls import patterns, url
 from django.contrib.auth import views as auth_views
 
 from baph.auth.registration import settings

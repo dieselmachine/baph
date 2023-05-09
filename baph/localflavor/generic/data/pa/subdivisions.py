@@ -25,7 +25,8 @@ PA_INDIGENOUS = (
   ('NB', _('Ngäbe-Buglé')),
 )
 
-PROVINCES = tuple(sorted(PA_PROVINCES + PA_INDIGENOUS, key=lambda obj: obj[1]))
+#PROVINCES = tuple(sorted(PA_PROVINCES + PA_INDIGENOUS, key=lambda obj: obj[1]))
+PROVINCES = tuple(PA_PROVINCES + PA_INDIGENOUS)
 
 DISTRICTS = (
   ('1', _('Bocas del Toro'), '1'),

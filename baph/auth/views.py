@@ -5,9 +5,6 @@ import re
 from uuid import UUID
 
 from baph.db.shortcuts import get_object_or_404
-from baph.utils.importing import import_attr
-render_to_response = import_attr(['coffin.shortcuts'], 'render_to_response')
-from coffin.template import RequestContext
 from django.conf import settings
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth.forms import AuthenticationForm
@@ -16,6 +13,7 @@ from django.contrib.auth.views import (
     password_reset_complete, password_reset_done)
 from django.core.urlresolvers import reverse
 from django.http import Http404, HttpResponseRedirect
+from django.shortcuts import render
 from django.template.response import TemplateResponse
 from django.utils.http import base36_to_int
 from django.utils.translation import ugettext_lazy as _
@@ -37,8 +35,7 @@ def password_reset_done(request,
     if extra_context is not None:
         context.update(extra_context)
 
-    return render_to_response(template_name, context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, context)
 
 def password_reset_complete(request,
                             template_name='registration/password_reset_complete.html',
@@ -50,8 +47,7 @@ def password_reset_complete(request,
     if extra_context is not None:
         context.update(extra_context)
 
-    return render_to_response(template_name, context,
-        context_instance=RequestContext(request))
+    return render(request, template_name, context)
 
 @csrf_protect
 @never_cache
@@ -89,10 +85,10 @@ def login(request, template_name='registration/login.html',
 
     request.session.set_test_cookie()
 
-    return render_to_response(template_name, {
+    return render(request, template_name, {
         'form': form,
         redirect_field_name: redirect_to,
-    }, context_instance=RequestContext(request))
+    })
 
 
 def logout(request, next_page=None,
@@ -105,9 +101,9 @@ def logout(request, next_page=None,
         if redirect_to:
             return HttpResponseRedirect(redirect_to)
         else:
-            return render_to_response(template_name, {
+            return render(request, template_name, {
                 'title': _('Logged out'),
-            }, context_instance=RequestContext(request))
+            })
     else:
         # Redirect to this page until the session has been cleared.
         return HttpResponseRedirect(next_page or request.path)
@@ -138,9 +134,9 @@ def password_reset(request, is_admin_site=False,
             return HttpResponseRedirect(post_reset_redirect)
     else:
         form = password_reset_form()
-    return render_to_response(template_name, {
+    return render(request, template_name, {
         'form': form,
-    }, context_instance=RequestContext(request))
+    })
 
 def password_reset_confirm(request, uidb36=None, token=None,
                            template_name='registration/password_reset_confirm.html',
@@ -185,7 +181,4 @@ def password_reset_confirm(request, uidb36=None, token=None,
     if extra_context is not None:
         context.update(extra_context)
 
-    return render_to_response(template_name, context,
-                               context_instance=RequestContext(request))
-
-
+    return render(request, template_name, context)

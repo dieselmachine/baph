@@ -1,5 +1,6 @@
 from __future__ import absolute_import
-from coffin.conf.urls.defaults import patterns
+from django.conf.urls import patterns
+
 
 urlpatterns = patterns('baph.auth.views',
     (r'^login/$', 'login', {'SSL': True}),

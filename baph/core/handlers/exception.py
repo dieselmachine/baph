@@ -140,5 +140,5 @@ def handle_uncaught_exception(request, resolver, exc_info):
     if resolver.urlconf_module is None:
         six.reraise(*exc_info)
     # Return an HttpResponse that displays a friendly error message.
-    callback, param_dict = resolver.resolve500()
+    callback, param_dict = resolver.resolve_error_handler(500)
     return callback(request, **param_dict)

@@ -172,7 +172,9 @@ class MemcacheServer(object):
         returns all keys on the server using 'stats cachedump'
         """
         func = partial(self.get_slab_keys_from_cachedump, limit=limit)
-        return reduce(operator.concat, list(map(func, self.slabs)))
+        if self.slabs:
+            return reduce(operator.concat, list(map(func, self.slabs)))
+        return []
 
     def get_keys(self, limit=None, include_expired=False):
         """
