@@ -93,7 +93,7 @@ class Command(BaseCommand):
     db = options.get('database')
     orm = ORM.get(db)
     db_info = orm.settings_dict
-    is_test_db = db_info.get('TEST', False)
+    is_test_db = db_info.get('IS_TEST_DB', False)
     if not is_test_db:
       print('Database "%s" cannot be purged because it is not a test ' \
             'database.\nTo flag this as a test database, set TEST to ' \
