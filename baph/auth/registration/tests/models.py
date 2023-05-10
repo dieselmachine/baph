@@ -4,7 +4,6 @@ import datetime
 import hashlib
 import re
 
-from django.contrib.auth.models import AnonymousUser
 from django.core import mail
 from django.conf import settings
 

@@ -167,6 +167,10 @@ class Settings:
       if setting.isupper():
         setting_value = getattr(module, setting)
         self.apply_setting(setting, setting_value, explicit)
+    if hasattr(module, 'apply'):
+      # call the apply func, passing the current settings dict
+      module.apply(self.__dict__)
+
     self.actions = self.actions.parents
     logger.info(msg.ljust(64) + 'SUCCESS')
 
@@ -237,7 +241,7 @@ class Settings:
     if not os.path.exists(module_path):
       logger.debug(msg.ljust(64) + 'NOT FOUND')
       return
-    
+
     if module_name not in sys.modules:
       kwargs = {
         '__file__': module_path,
