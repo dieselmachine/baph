@@ -5,37 +5,27 @@ import inspect
 import sys
 
 
-if not hasattr(inspect, 'getargspec'):
-    inspect.getargspec = inspect.getfullargspec
+python_version = (sys.version_info.major, sys.version_info.minor)
 
 
-if not hasattr(collections, 'Iterator'):
+if python_version > (3, 9):
     import collections.abc
-    setattr(collections, 'Iterator', collections.abc.Iterator)
+    setattr(collections, 'Callable', collections.abc.Callable)
     setattr(collections, 'Iterable', collections.abc.Iterable)
-    setattr(collections, 'Sequence', collections.abc.Sequence)
+    setattr(collections, 'Iterator', collections.abc.Iterator)
     setattr(collections, 'Mapping', collections.abc.Mapping)
     setattr(collections, "MutableMapping", collections.abc.MutableMapping)
+    setattr(collections, 'Sequence', collections.abc.Sequence)
+
+
+if python_version > (3, 10):
+    inspect.getargspec = inspect.getfullargspec
 
 
 def replace_settings_class():
     from django import conf
     from baph.conf import settings
     conf.settings = settings
-
-
-def apply_patches():
-    import os
-    from importlib import import_module
-
-    patch_dir = os.path.join(os.path.dirname(__file__), 'patches')
-    for mod_name in os.listdir(patch_dir):
-        filename = os.path.join(patch_dir, mod_name)
-        with open(filename, 'rt') as fp:
-            src = fp.read()
-        code = compile(src, filename, 'exec')
-        mod = import_module(mod_name)
-        exec(code, mod.__dict__)
 
 
 class Temp(object):
@@ -73,22 +63,12 @@ def setup():
 
     transaction.commit_on_success = commit_on_success
 
-
     from django.apps import apps
     apps.populate(settings.INSTALLED_APPS)
 
     from baph.utils.log import configure_logging
 
     configure_logging(settings.LOGGING_CONFIG, settings.LOGGING)
-
-    #from baph.utils.module_loading import module_has_submodule
-    #from django.utils import module_loading
-    #from django.apps import config
-
-
-    #module_loading.module_has_submodule = module_has_submodule
-    #config.module_has_submodule = module_has_submodule
-
 
     from django.test import testcases
 
@@ -99,4 +79,3 @@ def setup():
 
 
 replace_settings_class()
-apply_patches()
