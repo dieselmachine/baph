@@ -22,8 +22,7 @@ from django.utils.encoding import force_unicode
 from django.utils.html import escape, conditional_escape
 from django.utils.importlib import import_module
 from django.utils.translation import ugettext_lazy as _
-
-from baph.utils.importing import import_any_module, import_attr
+import funcy as f
 
 
 COUNTRY_DIVISIONS = {
@@ -62,6 +61,16 @@ STATE_PROVINCE_CODE_CHOICES = tuple(sorted(chain(*[
         for country in countries]
         for div_type, countries in COUNTRY_DIVISIONS.items()])))
 
+
+@f.collecting
+def get_countries():
+    """ returns an iterator of COUNTRIES keyed by name """
+    from . import COUNTRIES
+    for c in sorted(COUNTRIES[:-1], key=lambda x: x[1]):
+        yield c
+    yield COUNTRIES[-1]
+
+
 class CountryField(forms.ChoiceField):
     '''A country field, an uppercase two-letter ISO 3166-1 standard country
     code. Countries are defined in
@@ -73,12 +82,12 @@ class CountryField(forms.ChoiceField):
     '''
 
     def __init__(self, *args, **kwargs):
-        from . import COUNTRIES
-        kwargs.setdefault('choices', COUNTRIES)
+        kwargs['choices'] = get_countries
         kwargs['widget'] = forms.Select(attrs={
             'class': 'localflavor-generic-country',
         })
         super(CountryField, self).__init__(*args, **kwargs)
+
 
 class CountryCodeField(forms.ChoiceField):
 
