@@ -148,7 +148,7 @@ class GlobalMixin(object):
         if commit:
             session = orm.sessionmaker()
             session.add(self)
-            session.commit()
+            session.flush()
 
     def is_globalized(self):
         if self._meta.global_column == 'is_globalized':

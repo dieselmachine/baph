@@ -154,4 +154,4 @@ class UserRegistration(Base):
     def save(self):
         session = orm.sessionmaker()
         session.add(self)
-        session.commit()
+        session.flush()

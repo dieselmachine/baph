@@ -73,7 +73,7 @@ class SessionStore(SessionBase):
         session = orm.sessionmaker()
         try:
             session.merge(obj)
-            session.commit()
+            session.flush()
         except SQLAlchemyError:
             session.rollback()
             raise

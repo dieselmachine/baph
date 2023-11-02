@@ -4,6 +4,8 @@ from collections import defaultdict
 from importlib import import_module
 import sys
 
+from django.apps import apps
+from django.apps.config import MODELS_MODULE_NAME
 from django.conf import settings
 from sqlalchemy import and_, event, inspect
 from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
@@ -171,7 +173,7 @@ class Model(CacheMixin, ModelPermissionMixin, GlobalMixin):
         if has_identity(self):
             session = object_session(self)
             session.delete(self)
-            session.commit()
+            session.flush()
 
     def dictify(self, value):
         " takes a value, and converts any contained instances into dicts "
@@ -191,12 +193,16 @@ class Model(CacheMixin, ModelPermissionMixin, GlobalMixin):
 
         :rtype: :class:`dict`
         '''
+        #print('to_dict:', self, self.__dict__)
         __dict__ = dict([(key, val) for key, val in six.iteritems(self.__dict__)
                          if not key.startswith('_sa_')])
+        for attr in inspect(type(self)).column_attrs:
+            __dict__[attr.key] = getattr(self, attr.key)
+        '''
         if len(__dict__) == 0:
             for attr in inspect(type(self)).column_attrs:
                 __dict__[attr.key] = getattr(self, attr.key)
-
+        '''
         for key in self._meta.extra_dict_props:
             value = getattr(self, key)
             __dict__[key] = self.dictify(value)
@@ -215,14 +221,16 @@ class Model(CacheMixin, ModelPermissionMixin, GlobalMixin):
         if commit:
             if self not in session:
                 session.add(self)
-            session.commit()
+            session.flush()
 
     def _before_flush(self, session, add):
+        #print('_before_flush:start')
         " private before_flush routine. to provide custom behavior, "
         " override the public 'before_flush' on the specific class "
         for attr in self.before_flush_attrs:
             attr.before_flush(session, add, instance=self)
         self.before_flush(session, add)
+        #print('_before_flush:end')
 
     def before_flush(self, session, add):
         " the public hook for instance preprocessing before a flush event "
@@ -242,10 +250,12 @@ class Model(CacheMixin, ModelPermissionMixin, GlobalMixin):
 
 @event.listens_for(Session, 'before_flush')
 def before_flush(session, flush_context, instances):
+    #print('before_flush:start')
     for obj in session.new:
         obj._before_flush(session, add=True)
     for obj in session.dirty:
         obj._before_flush(session, add=False)
+    #print('before_flush:end')
 
 
 def normalize_args(args):
@@ -318,10 +328,23 @@ class ModelBase(type):
             meta = attr_meta
         base_meta = getattr(new_class, '_meta', None)
 
+        app_config = apps.get_containing_app_config(module)
+
         if getattr(meta, 'app_label', None) is None:
-            model_module = sys.modules[new_class.__module__]
-            #kwargs = {"app_label": model_module.__name__.rsplit('.', 1)[0]}
-            kwargs = {"app_label": model_module.__name__.split('.')[-2]}
+            if app_config is None:
+                model_module = sys.modules[new_class.__module__]
+                package_components = model_module.__name__.split('.')
+                package_components.reverse()
+                try:
+                    app_label_index = package_components.index(MODELS_MODULE_NAME) + 1
+                except ValueError:
+                    app_label_index = 1
+                try:
+                    kwargs = {'app_label': package_components[app_label_index]}
+                except IndexError:
+                    raise ImproperlyConfigured('test')
+            else:
+                kwargs = {'app_label': app_config.label}
         else:
             kwargs = {}
 
@@ -389,7 +412,7 @@ class ModelBase(type):
         #register_models(new_class._meta.app_label, new_class)
         #return get_model(new_class._meta.app_label, name)
         #new_class._meta.apps.register_model(new_class._meta.app_label, new_class)
-        from django.apps import apps
+        
         #print('register:', new_class._meta.app_label, new_class)
         apps.register_model(new_class._meta.app_label, new_class)
         return new_class
@@ -471,7 +494,9 @@ def kill_cache(mapper, connection, target):
         return
     if not target.is_cacheable:
         return
+    #print('kill_cache:start')
     target.kill_cache()
+    #print('kill_cache:end')
 
 
 @event.listens_for(Session, 'before_flush')

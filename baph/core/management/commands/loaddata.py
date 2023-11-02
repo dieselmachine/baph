@@ -40,8 +40,10 @@ from baph.utils.glob import glob_escape
 logger = logging.getLogger(__name__)
 orm = ORM.get()
 
+
 def humanize(dirname):
     return "'%s'" % dirname if dirname else 'absolute path'
+
 
 class SingleZipReader(zipfile.ZipFile):
 
@@ -52,6 +54,7 @@ class SingleZipReader(zipfile.ZipFile):
 
     def read(self):
         return zipfile.ZipFile.read(self, self.namelist()[0])
+
 
 def get_deferred_updates(session):
     deferred = []
@@ -70,6 +73,7 @@ def get_deferred_updates(session):
         if update:
             deferred.append((type(obj), filters, update))
     return deferred
+
 
 class Command(BaseCommand):
     help = 'Installs the named fixture(s) in the database.'
@@ -102,25 +106,27 @@ class Command(BaseCommand):
       )
 
     def handle(self, *fixture_labels, **options):
-      self.ignore = options['ignore']
-      self.using = options['database']
-      self.app_label = options['app_label']
-      self.verbosity = options['verbosity']
-      #self.excluded_models, self.excluded_apps = parse_apps_and_model_labels(options['exclude'])
-      self.format = options['format']
+        #print('loaddata.handle')
+        #assert False
+        self.ignore = options['ignore']
+        self.using = options['database']
+        self.app_label = options['app_label']
+        self.verbosity = options['verbosity']
+        #self.excluded_models, self.excluded_apps = parse_apps_and_model_labels(options['exclude'])
+        self.format = options['format']
 
-      '''
-      with transaction.atomic(using=self.using):
-          self.loaddata(fixture_labels)
+        '''
+        with transaction.atomic(using=self.using):
+            self.loaddata(fixture_labels)
 
-      # Close the DB connection -- unless we're still in a transaction. This
-      # is required as a workaround for an  edge case in MySQL: if the same
-      # connection is used to create tables, load data, and query, the query
-      # can return incorrect results. See Django #7572, MySQL #37735.
-      if transaction.get_autocommit(self.using):
-          connections[self.using].close()
-      '''
-      self.loaddata(fixture_labels)
+        # Close the DB connection -- unless we're still in a transaction. This
+        # is required as a workaround for an  edge case in MySQL: if the same
+        # connection is used to create tables, load data, and query, the query
+        # can return incorrect results. See Django #7572, MySQL #37735.
+        if transaction.get_autocommit(self.using):
+            connections[self.using].close()
+        '''
+        self.loaddata(fixture_labels)
 
     def loaddata(self, fixture_labels):
         #connection = connections[self.using]
@@ -141,13 +147,13 @@ class Command(BaseCommand):
           'stdin': (lambda *args: sys.stdin, None),
         }
         if has_bz2:
-          self.compression_formats['bz2'] = (bz2.BZ2File, 'r')
+            self.compression_formats['bz2'] = (bz2.BZ2File, 'r')
 
         for fixture_label in fixture_labels:
-          if self.find_fixtures(fixture_label):
-            break
+            if self.find_fixtures(fixture_label):
+                break
         else:
-          return
+            return
 
         '''
         with connection.constraint_checks_disabled():
@@ -155,10 +161,10 @@ class Command(BaseCommand):
                 self.load_label(fixture_label)
         '''
         session = orm.sessionmaker()
-        session.close()
+        #session.close()
         for fixture_label in fixture_labels:
-          self.load_label(fixture_label)
-        session.commit()
+            self.load_label(fixture_label)
+        session.flush()
 
         # Since we disabled constraint checks, we must manually check for
         # any invalid keys that might have been added
@@ -204,6 +210,7 @@ class Command(BaseCommand):
         """
         #connection = connections[self.using]
         #session = Session(bind=connection.connection)
+        #print('load_label:', fixture_label)
         session = orm.sessionmaker()
         show_progress = self.verbosity >= 3
         
@@ -220,9 +227,10 @@ class Command(BaseCommand):
                 self.fixture_count += 1
                 objects_in_fixture = 0
                 loaded_objects_in_fixture = 0
-                    
-                objects = serializers.deserialize(ser_fmt, fixture,
-                    using=self.using, ignorenonexistent=self.ignore)
+
+                objects = serializers.deserialize(
+                    ser_fmt, fixture, using=self.using,
+                    ignorenonexistent=self.ignore)
 
                 for obj in objects:
                     objects_in_fixture += 1
@@ -240,7 +248,7 @@ class Command(BaseCommand):
                             session.expunge(identity_map[(cls, key)])
                         identity_map[(cls, key)] = obj
                         session.add(obj)
-                        
+
                 self.loaded_object_count += loaded_objects_in_fixture
                 self.fixture_object_count += objects_in_fixture
             except AttributeError:
@@ -277,7 +285,7 @@ class Command(BaseCommand):
                 for attr, value in update.items():
                     setattr(instance, attr.key, value)
             session.flush()
-        except:
+        except Exception:
             session.rollback()
             raise
 

@@ -89,7 +89,7 @@ class SetPasswordForm(BaseSetPasswordForm):
     def save(self, commit=True):
         self.user.set_password(self.cleaned_data['new_password1'])
         if commit:
-            self.session.commit()
+            self.session.flush()
         return self.user
         
 class PasswordChangeForm(SetPasswordForm):

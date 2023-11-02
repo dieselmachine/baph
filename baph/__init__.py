@@ -73,7 +73,7 @@ def setup():
     from django.test import testcases
 
     def connections_support_transactions():
-        return False
+        return getattr(settings, 'USE_TRANSACTIONS', False)
 
     testcases.connections_support_transactions = connections_support_transactions
 

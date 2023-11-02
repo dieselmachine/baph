@@ -33,7 +33,7 @@ class SignupManager(object):
 
         session = orm.sessionmaker()
         session.add(new_user)
-        session.commit()
+        session.flush()
 
         if auth_settings.BAPH_ACTIVATION_REQUIRED:
             new_user.signup.send_activation_email()
@@ -120,7 +120,7 @@ class SignupManager(object):
             salt, new_activation_key = generate_sha1(signup.user.username)
             signup.activation_key = new_activation_key
             signup.user.date_joined = datetime.now()
-            session.commit()
+            session.flush()
             signup.send_activation_email()
             return True
         except Exception as e:
@@ -157,7 +157,7 @@ class SignupManager(object):
             old_email = user.email
             user.email = signup.email_unconfirmed
             signup.email_unconfirmed, signup.email_confirmation_key = '',''
-            session.commit()
+            session.flush()
 
             # Send the confirmation_complete signal
             # TODO: implement signals

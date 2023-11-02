@@ -156,7 +156,7 @@ class Command(BaseCommand):
         session.execute(DropTable(table))
       for schema in schemas:
         session.execute(DropSchema(schema))
-      session.commit()
+      session.flush()
       session.bind.dispose()
 
     else:

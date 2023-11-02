@@ -65,5 +65,5 @@ class ModelStore(Store):
 
         nonce = OAuthNonce(**params)
         session.add(nonce)
-        session.commit()
+        session.flush()
         return True

@@ -20,12 +20,14 @@ class SQLAlchemyMiddleware(object):
         request.orm = ORM.get()
 
     def process_response(self, request, response):
+        #print('process_response:')
         if hasattr(request, 'orm'):
             session = request.orm.sessionmaker()
-            session.close()
+            #session.close()
         return response
 
     def process_exception(self, request, exception):
+        #print('process_exception:')
         if hasattr(request, 'orm'):
             session = request.orm.sessionmaker()
             session.rollback()

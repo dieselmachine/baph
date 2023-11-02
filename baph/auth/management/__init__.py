@@ -68,7 +68,7 @@ def _get_all_permissions(opts):
                     if len(limiters) != 1:
                         # we'll worry about this if it ever happens
                         assert False
-                    
+
                     key = ','.join(keys)
                     limiter += limiters.pop()
 
@@ -83,7 +83,8 @@ def _get_all_permissions(opts):
                     })
 
     return perms
-        
+
+
 def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
                        **kwargs):
     pkg, _ = app.__name__.rsplit('.', 1)
@@ -144,7 +145,6 @@ def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
         ]
 
     session.execute(Permission.__table__.insert(), perms)
-    session.flush()
 
     if verbosity >= 2:
         for perm in perms:

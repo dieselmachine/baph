@@ -27,6 +27,7 @@ def django_backend_to_sqla_drivername(backend):
         return 'postgresql'
     return backend
 
+
 def django_config_to_sqla_config(config):
     """
     Takes a dict of django db config params and converts the keys
@@ -49,6 +50,7 @@ def django_config_to_sqla_config(config):
             del params[k]
     return params
 
+
 def load_engine(config):
     url = URL(**django_config_to_sqla_config(config))
     try:
@@ -58,6 +60,7 @@ def load_engine(config):
     except ArgumentError:
         error_msg = "%r isn't a valid dialect/driver" % url
         raise ImproperlyConfigured(error_msg)
+
 
 def find_circular_dependencies(metadata):
     dependencies = defaultdict(set)
@@ -85,8 +88,10 @@ def find_circular_dependencies(metadata):
 
     return rsp
 
+
 def scopefunc():
     return 'single'
+
 
 class DatabaseWrapper(object):
     def __init__(self, settings_dict, alias=DEFAULT_DB_ALIAS):
@@ -98,9 +103,13 @@ class DatabaseWrapper(object):
         self.alias = alias
         self.engine = load_engine(settings_dict)
         self.Base = get_declarative_base(bind=self.engine)
+        '''
         self.session_factory = sessionmaker(bind=self.engine)
         self.sessionmaker = scoped_session(sessionmaker(
-            bind=self.engine, autoflush=False))
+            bind=self.engine, autoflush=False), scopefunc=scopefunc)
+        '''
+        self.session_factory = sessionmaker(bind=self.engine, autoflush=False)
+        self.sessionmaker = scoped_session(self.session_factory, scopefunc=scopefunc)
         # TODO: uncomment line below once transactional tests are ready
         #    bind=self.engine, autoflush=False), scopefunc=scopefunc)
     '''

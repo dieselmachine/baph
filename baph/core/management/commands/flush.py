@@ -69,11 +69,11 @@ Are you sure you want to do this?
                         continue
                     try:
                         session.execute(table.delete())
-                    except Exception as e:
+                    except Exception:
                         # table not present
                         pass
-                session.flush()
-            except Exception as e:
+                session.commit()
+            except Exception:
                 session.rollback()
                 raise CommandError('Could not flush the database')
             finally:

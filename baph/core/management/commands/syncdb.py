@@ -4,6 +4,7 @@ from __future__ import print_function
 from optparse import make_option
 import traceback
 
+from django.apps import apps
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.color import no_style
@@ -36,11 +37,16 @@ def get_tablename(obj):
 
 class Command(NoArgsCommand):
     option_list = NoArgsCommand.option_list + (
-        make_option('--noinput', action='store_false', dest='interactive', default=True,
+        make_option(
+            '--noinput', action='store_false', dest='interactive',
+            default=True,
             help='Tells Django to NOT prompt the user for input of any kind.'),
-        make_option('--no-initial-data', action='store_false', dest='load_initial_data', default=True,
+        make_option(
+            '--no-initial-data', action='store_false',
+            dest='load_initial_data', default=True,
             help='Tells Django not to load any initial data after database synchronization.'),
-        make_option('--database', action='store', dest='database',
+        make_option(
+            '--database', action='store', dest='database',
             default=DEFAULT_DB_ALIAS, help='Nominates a database to synchronize. '
                 'Defaults to the "default" database.'),
     )
@@ -96,13 +102,13 @@ class Command(NoArgsCommand):
         if not default_schema in existing_schemas:
             tmp_engine.execute(CreateSchema(default_schema))
             existing_schemas.add(default_schema)
-        
+
         orm = ORM.get(db)
 
         # now reconnect with the default_db provided
         conn = engine.connect()
         Base.metadata.bind = engine
-        
+
         if verbosity >= 3:
             self.stdout.write("Getting existing schemas...\n")
             for schema in existing_schemas:
@@ -117,7 +123,7 @@ class Command(NoArgsCommand):
             for name in engine.engine.table_names(schema, connection=conn):
                 existing_tables.append('%s.%s' % (schema,name))
                 if verbosity >= 3:
-                    self.stdout.write("\t%s.%s\n" % (schema,name))    
+                    self.stdout.write("\t%s.%s\n" % (schema,name))
 
         existing_models = []
         if verbosity >= 1:
@@ -141,12 +147,11 @@ class Command(NoArgsCommand):
         all_models = []
         if verbosity >= 1:
             self.stdout.write("Getting required models...\n")
-        for app in get_apps():
-            for model in get_models(app, include_auto_created=True):
-                app_name = app.__name__.rsplit('.',1)[0]
-                all_models.append( (app_name, model) )
+        for app_config in apps.get_app_configs():
+            for model in app_config.get_models():
+                all_models.append((app_config.label, model))
                 if verbosity >= 3:
-                    self.stdout.write("\t%s.%s\n" % (app_name,model))
+                    self.stdout.write("\t%s.%s\n" % (app_config.label, model))
 
         schema_manifest = set()
         table_manifest = set()
@@ -154,6 +159,8 @@ class Command(NoArgsCommand):
             self.stdout.write('Building manifest...\n')
         for app_name, model in all_models:
             tablename = get_tablename(model)
+            if not tablename:
+                continue
             if tablename in existing_tables:
                 continue
             table_manifest.add( (app_name, model) )
@@ -180,7 +187,7 @@ class Command(NoArgsCommand):
             if verbosity >= 3:
                 self.stdout.write("\t%s\n" % schema)
             engine.execute(CreateSchema(schema))
-            existing_schemas.add(schema)            
+            existing_schemas.add(schema)
 
         # create any missing tables
         created_models = set()
@@ -198,6 +205,7 @@ class Command(NoArgsCommand):
                 existing_tables.append(tablename)
             existing_models.append(model)
             created_models.add(model)
+
         orm.Base.metadata.create_all(bind=engine, tables=to_create)
 
         # Send the post_syncdb signal

@@ -169,4 +169,4 @@ class BaseUser(AbstractBaseUser):
         if not session:
             session = orm.sessionmaker()
             session.add(self)
-        session.commit()
+        session.flush()

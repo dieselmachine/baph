@@ -8,8 +8,9 @@ import six
 
 
 def identity_key(*args, **kwargs):
-  """ returns a 2-tuple identity key, not the 3-tuple in newer SQLA """
-  return new_identity_key(*args, **kwargs)[:2]
+    """ returns a 2-tuple identity key, not the 3-tuple in newer SQLA """
+    return new_identity_key(*args, **kwargs)[:2]
+
 
 def has_inherited_table(cls):
     # TODO: a fix in sqla 0.9 should make this unnecessary, check it
@@ -23,6 +24,7 @@ def has_inherited_table(cls):
         if getattr(class_, '__table__', None) is not None:
             return True
     return False
+
 
 def class_resolver(cls):
     """

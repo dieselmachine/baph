@@ -277,13 +277,14 @@ class RegistrationViewsTests(TestCase):
                                     data={'identification': 'john@example.com',
                                           'password': 'blowfish'})
         self.failUnless(self.client.session.get_expire_at_browser_close())
+
     def test_signin_view_inactive(self):
         """ A ``POST`` from a inactive user """
         session = orm.sessionmaker()
         user = session.query(User).filter_by(email='john@example.com').first()
         user.is_active = False
         user.save()
-        session.commit()
+        session.flush()
 
         response = self.client.post(reverse('baph_signin'),
                                     data={'identification': 'john@example.com',

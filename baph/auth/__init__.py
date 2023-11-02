@@ -28,7 +28,7 @@ def login(request, user):
     # TODO: It would be nice to support different login methods, like signed
     # cookies.
     user.last_login = datetime.now()
-    session.commit()
+    session.flush()
 
     if SESSION_KEY in request.session:
         if request.session[SESSION_KEY] != user.id:

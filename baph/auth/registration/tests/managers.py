@@ -102,7 +102,7 @@ class SignupManagerTests(TestCase):
         user.date_joined -= datetime.timedelta(days=auth_settings.BAPH_ACTIVATION_DAYS + 1)
         session = orm.sessionmaker()
         session.add(user)
-        session.commit()
+        session.flush()
 
         # Try to activate the user
         SignupManager.activate_user(user.signup.activation_key)

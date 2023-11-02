@@ -17,25 +17,26 @@ from baph.db.orm import ORM
 
 orm = ORM.get()
 
+
 class Command(BaseCommand):
-  def add_arguments(self, parser):
-    parser.add_argument(
-      '--flush', action='store_true', dest='flush', 
-      default=False,
-      help='Flushes all existing permissions before population',
-    )
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--flush', action='store_true', dest='flush', 
+            default=False,
+            help='Flushes all existing permissions before population',
+        )
 
-  def handle(self, **options):
-    verbosity = int(options.get('verbosity', 1))
-    interactive = options.get('interactive')
-    flush = options.get('flush')
-    self.style = no_style()
+    def handle(self, **options):
+        verbosity = int(options.get('verbosity', 1))
+        interactive = options.get('interactive')
+        flush = options.get('flush')
+        self.style = no_style()
 
-    session = orm.sessionmaker()
-    if flush:
-      # clear existing permissions
-      session.execute(Permission.__table__.delete())
-    for app in get_apps():
-      create_permissions(app, [], verbosity)
-    session.commit()
-    session.close()
+        session = orm.sessionmaker()
+        if flush:
+            # clear existing permissions
+            session.execute(Permission.__table__.delete())
+        for app in get_apps():
+            create_permissions(app, [], verbosity)
+        session.commit()
+        session.close()
