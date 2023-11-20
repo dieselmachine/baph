@@ -23,7 +23,10 @@ class SQLAlchemyMiddleware(object):
         #print('process_response:')
         if hasattr(request, 'orm'):
             session = request.orm.sessionmaker()
-            #session.close()
+            try:
+                session.flush()
+            except:
+                session.rollback()
         return response
 
     def process_exception(self, request, exception):

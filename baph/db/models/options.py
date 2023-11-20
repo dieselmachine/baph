@@ -199,6 +199,10 @@ class Options(object):
 
         del self.meta
 
+    def _expire_cache(self):
+        # TODO: this should do something, but for now it just needs to exist
+        pass
+
     def verbose_name_raw(self):
         """
         There are a few places where the untranslated verbose name is needed

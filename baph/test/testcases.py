@@ -50,6 +50,11 @@ PRINT_TEST_TIMINGS = getattr(settings, 'PRINT_TEST_TIMINGS', False)
 #Session = sessionmaker()
 orm = ORM.get()
 
+def db_debug(msg):
+    "SELECTs a debug message so it appears in the db log"
+    session = orm.sessionmaker()
+    session.execute("/* %s */" % msg)
+
 
 class TransactionTestCase(test.TransactionTestCase):
     test_start_time = None
@@ -80,7 +85,8 @@ class TransactionTestCase(test.TransactionTestCase):
         #print('BaphTTest.teardownClass end')
 
     def run(self, *args, **kwargs):
-        #print('BaphTest.run start:')
+        #print('\nBaphTest.run:', self)
+        #db_debug(str(self))
         type(self).tests_run += 1
         super(TransactionTestCase, self).run(*args, **kwargs)
         #print('BaphTest.run end:\n')
@@ -109,22 +115,38 @@ class TransactionTestCase(test.TransactionTestCase):
             print('  %s: %d calls, totalling %.03fs (%.02f%%)' % (
                 keys[i].ljust(max_key_len), len(v), sum(v), 100.0*sum(v)/total))
 
-    def _fixture_setup(self):
+    @classmethod
+    def load_fixtures(cls, *fixtures):
         params = {
             'verbosity': 0,
             'database': None,
         }
-        if self.fixtures:
-            with timer('loaddata'):
-                call_command('loaddata', *self.fixtures, **params)
+        with timer('loaddata'):
+            call_command('loaddata', *fixtures, **params)
+        if not connections_support_transactions():
+            cls.session.commit()
 
-    def _fixture_teardown(self):
+    @classmethod
+    def purge_fixtures(cls, *fixtures):
         params = {
             'verbosity': 0,
             'interactive': False,
         }
         with timer('flush'):
             call_command('flush', **params)
+        if not connections_support_transactions():
+            cls.session.flush()
+            cls.session.close()
+
+    def _fixture_setup(self):
+        if self.fixtures:
+            self.load_fixtures(*self.fixtures)
+        if hasattr(self, 'persistent_fixtures'):
+            self.load_fixtures(*self.persistent_fixtures)
+
+    def _fixture_teardown(self):
+        if self.fixtures or hasattr(self, 'persistent_fixtures'):
+            self.purge_fixtures()
 
     def assertItemsOrderedBy(self, items, field):
         if not items:
@@ -155,7 +177,6 @@ class TestCase(TransactionTestCase):
         #print('BaphTest.setupClass start')
         super(TestCase, cls).setUpClass()
         if not connections_support_transactions():
-            #print('BaphTest.setupClass end')
             return
 
         cls.done = False
@@ -164,13 +185,11 @@ class TestCase(TransactionTestCase):
         cls.outer = cls.session.begin_nested()
         #print('  outer trans:', cls.outer._state)
 
-        if cls.fixtures:
+        fixtures = getattr(cls, 'persistent_fixtures', cls.fixtures)
+
+        if fixtures:
             try:
-                with timer('loaddata'):
-                    call_command('loaddata', *cls.fixtures, **{
-                        'verbosity': 0,
-                        'database': None,
-                    })
+                cls.load_fixtures(*fixtures)
             except Exception:
                 cls.outer.rollback()
                 raise
@@ -219,9 +238,11 @@ class TestCase(TransactionTestCase):
             return super(TestCase, self)._fixture_setup()
 
     def _fixture_teardown(self):
+        self.session.expunge_all()
         if not connections_support_transactions():
             return super(TestCase, self)._fixture_teardown()
         with timer('rollback'):
+            #print('  inner trans rollback')
             self.inner.rollback()
         self.session.expunge_all()
 
@@ -230,12 +251,16 @@ class MemcacheMixin(object):
 
     def _fixture_setup(self):
         # clear all caches before loading fixtures
+        super(MemcacheMixin, self)._fixture_setup()
         for c in settings.CACHES:
             cache = get_cache(c)
             cache.clear()
             cache.close()
             del cache
-        super(MemcacheMixin, self)._fixture_setup()
+
+    def setUp(self):
+        super(MemcacheMixin, self).setUp()
+        self.initial = {}
 
     def populate_cache(self, asset_aliases=None):
         """

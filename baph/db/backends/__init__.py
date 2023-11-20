@@ -7,13 +7,15 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connections
 from django.utils.functional import cached_property
-from sqlalchemy import create_engine
+from sqlalchemy import Column, create_engine, Integer
 from sqlalchemy.engine.url import URL
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import sessionmaker, scoped_session
 from sqlalchemy.pool import NullPool
+from sqlalchemy.schema import CreateTable
 
-from baph.db import DEFAULT_DB_ALIAS
+from baph.db import DEFAULT_DB_ALIAS, ORM
+from baph.middleware.request import get_request
 
 
 def django_backend_to_sqla_drivername(backend):
@@ -90,7 +92,10 @@ def find_circular_dependencies(metadata):
 
 
 def scopefunc():
-    return 'single'
+    if getattr(settings, 'USE_TRANSACTIONS', False):
+        return 'single'
+    else:
+        return get_request()
 
 
 class DatabaseWrapper(object):
@@ -183,8 +188,13 @@ class DatabaseWrapper(object):
     @cached_property
     def supports_transactions(self):
         """ Confirm support for transactions."""
+
+        class RollbackTest(self.Base):
+            __tablename__ = 'ROLLBACK_TEST'
+            X = Column(Integer, primary_key=True)
+
         session = self.sessionmaker()
-        session.execute('CREATE TABLE ROLLBACK_TEST (X INT)')
+        session.execute(CreateTable(RollbackTest.__table__))
         session.execute('INSERT INTO ROLLBACK_TEST (X) VALUES (8)')
         session.rollback()
         results = session.execute('SELECT COUNT(X) FROM ROLLBACK_TEST')

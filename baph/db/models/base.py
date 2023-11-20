@@ -224,13 +224,11 @@ class Model(CacheMixin, ModelPermissionMixin, GlobalMixin):
             session.flush()
 
     def _before_flush(self, session, add):
-        #print('_before_flush:start')
         " private before_flush routine. to provide custom behavior, "
         " override the public 'before_flush' on the specific class "
         for attr in self.before_flush_attrs:
             attr.before_flush(session, add, instance=self)
         self.before_flush(session, add)
-        #print('_before_flush:end')
 
     def before_flush(self, session, add):
         " the public hook for instance preprocessing before a flush event "
@@ -250,12 +248,10 @@ class Model(CacheMixin, ModelPermissionMixin, GlobalMixin):
 
 @event.listens_for(Session, 'before_flush')
 def before_flush(session, flush_context, instances):
-    #print('before_flush:start')
     for obj in session.new:
         obj._before_flush(session, add=True)
     for obj in session.dirty:
         obj._before_flush(session, add=False)
-    #print('before_flush:end')
 
 
 def normalize_args(args):
@@ -384,22 +380,22 @@ class ModelBase(type):
                     continue
             return model
 
-        if attrs.get('__tablename__') and not attrs.get('__abstract__', None):
-            # build the table_args for the current model
-            # print('[%s]' % name)
-            base_args = getattr(settings, 'BAPH_DEFAULT_TABLE_ARGS', ())
-            _, kwargs = normalize_args(base_args)
-            for p in reversed(parents):
-                if not hasattr(p, '__table_args__'):
-                    continue
-                _, _kwargs = normalize_args(p.__table_args__)
+        if not attrs.get('__abstract__', None):
+            tname = attrs.get('__tablename__')
+            if tname:
+                # build the table_args for the current model
+                base_args = getattr(settings, 'BAPH_DEFAULT_TABLE_ARGS', ())
+                
+                _, kwargs = normalize_args(base_args)
+                for p in reversed(parents):
+                    if not hasattr(p, '__table_args__'):
+                        continue
+                    _, _kwargs = normalize_args(p.__table_args__)
+                    kwargs.update(_kwargs)
+                table_args = attrs.pop('__table_args__', None)
+                args, _kwargs = normalize_args(table_args)
                 kwargs.update(_kwargs)
-            table_args = attrs.pop('__table_args__', None)
-            # print('  old:', table_args)
-            args, _kwargs = normalize_args(table_args)
-            kwargs.update(_kwargs)
-            attrs['__table_args__'] = args + (kwargs,)
-            # print('  new:', attrs['__table_args__'])
+                attrs['__table_args__'] = args + (kwargs,)
 
         # Add all attributes to the class.
         for obj_name, obj in attrs.items():
@@ -412,11 +408,10 @@ class ModelBase(type):
         #register_models(new_class._meta.app_label, new_class)
         #return get_model(new_class._meta.app_label, name)
         #new_class._meta.apps.register_model(new_class._meta.app_label, new_class)
-        
+
         #print('register:', new_class._meta.app_label, new_class)
         apps.register_model(new_class._meta.app_label, new_class)
         return new_class
-        
 
     def __setattr__(cls, key, value):
         _add_attribute(cls, key, value)

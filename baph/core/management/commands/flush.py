@@ -17,6 +17,7 @@ from six.moves import input
 orm = ORM.get()
 Base = orm.Base
 
+
 class Command(BaseCommand):
     help = "Executes ``sqlflush`` on the current database."
 
@@ -78,7 +79,6 @@ Are you sure you want to do this?
                 raise CommandError('Could not flush the database')
             finally:
                 session.execute('set foreign_key_checks=1')
-                session.commit()
 
             self.emit_post_migrate(verbosity, interactive, None)
 
