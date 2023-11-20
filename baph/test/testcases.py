@@ -20,7 +20,7 @@ from .signals import add_timing
 if not hasattr(test.SimpleTestCase, 'assertItemsEqual'):
     test.SimpleTestCase.assertItemsEqual = test.SimpleTestCase.assertCountEqual
 
-from contextlib import ContextDecorator, contextmanager
+from contextlib import contextmanager
 
 
 @contextmanager
@@ -31,18 +31,6 @@ def timer(key):
     finally:
         elapsed = time.monotonic() - start
         add_timing.send(None, key=key, time=elapsed)
-
-
-class Timer(ContextDecorator):
-    def __init__(self, key):
-        self.key = key
-
-    def __enter__(self):
-        self.start = time.monotonic()
-
-    def __exit__(self):
-        elapsed = time.monotonic() - self.start
-        add_timing.send(None, key=self.key, time=elapsed)
 
 
 PRINT_TEST_TIMINGS = getattr(settings, 'PRINT_TEST_TIMINGS', False)
