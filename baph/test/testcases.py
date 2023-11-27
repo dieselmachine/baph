@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import print_function
 from collections import defaultdict
-import time
+import timeit
 
 from django.conf import settings
 from django.core.cache import get_cache
@@ -25,11 +25,11 @@ from contextlib import contextmanager
 
 @contextmanager
 def timer(key):
-    start = time.monotonic()
+    start = timeit.default_timer()
     try:
         yield
     finally:
-        elapsed = time.monotonic() - start
+        elapsed = timeit.default_timer() - start
         add_timing.send(None, key=key, time=elapsed)
 
 
@@ -57,7 +57,7 @@ class TransactionTestCase(test.TransactionTestCase):
         cls.session = orm.sessionmaker()
         if PRINT_TEST_TIMINGS:
             cls.timings = defaultdict(list)
-            cls.test_start_time = time.time()
+            cls.test_start_time = timeit.default_timer()
             add_timing.connect(cls.add_timing)
         #print('BaphTTest.setupClass end')
 
@@ -67,7 +67,7 @@ class TransactionTestCase(test.TransactionTestCase):
         cls.session.close()
         if PRINT_TEST_TIMINGS:
             add_timing.disconnect(cls.add_timing)
-            cls.test_end_time = time.time()
+            cls.test_end_time = timeit.default_timer()
             cls.print_timings()
         super(TransactionTestCase, cls).tearDownClass()
         #print('BaphTTest.teardownClass end')
