@@ -92,9 +92,24 @@ def find_circular_dependencies(metadata):
 
 
 def scopefunc():
-    if getattr(settings, 'USE_TRANSACTIONS', False):
+    if (getattr(settings, 'IS_TEST', False) & 
+        getattr(settings, 'USE_TRANSACTIONS', False)):
+        # force sessionmaker to always return the same session regardless
+        # of thread or active request. This means the session will always
+        # be aware of flushes
+        #print('scope: single')
         return 'single'
     else:
+        # scope the session to the active request. without an active request,
+        # the session will be scoped to the thread (default scope), so one
+        # thread will not see pending db operations in another thread until
+        # they are commited (flush wont work)
+        '''
+        if get_request():
+            print('scope:request')
+        else:
+            print('scope:thread')
+        '''
         return get_request()
 
 

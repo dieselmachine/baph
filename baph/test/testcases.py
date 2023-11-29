@@ -187,16 +187,16 @@ class TestCase(TransactionTestCase):
             cls.outer.rollback()
             raise
 
-        #print('  inner trans begin')
         cls.inner = cls.session.begin_nested()
-        #print('  inner trans:', cls.inner._state)
+        cls.inner2 = cls.session.begin_nested()
 
         def restart_transaction(session, trans):
-            #print('restart trans:', trans)
-            if trans is cls.outer and not cls.done:
-                assert False
             if not cls.inner.is_active:
                 cls.inner = cls.session.begin_nested()
+                cls.inner2 = cls.session.begin_nested()
+
+            elif not cls.inner2.is_active:
+                cls.inner2 = cls.session.begin_nested()
                 cls.session.expire_all()
 
         cls.event_params = (cls.session, "after_transaction_end", restart_transaction)
