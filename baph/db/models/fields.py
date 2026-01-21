@@ -8,7 +8,6 @@ from django.utils.encoding import smart_text, force_text, force_bytes
 from django.utils.text import capfirst
 from sqlalchemy import *
 from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
-from sqlalchemy.ext.declarative.clsregistry import _class_resolver
 from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
 from sqlalchemy.ext.orderinglist import OrderingList
 from sqlalchemy.orm.collections import MappedCollection
@@ -18,20 +17,14 @@ from baph.core.validators import MaxLengthValidator
 from baph.db import types
 from baph.forms import fields
 from baph.utils.collections import duck_type_collection
+from .utils import class_resolver, is_proxy
 
 
 def get_related_class_from_attr(attr):
     prop = attr.property
     related_cls = prop.argument
-    if isinstance(related_cls, FunctionType):
-        # lazy-loaded Model
-        related_cls = related_cls()
-    if hasattr(related_cls, 'is_mapper') and related_cls.is_mapper:
-        # we found a mapper, grab the class from it
-        related_cls = related_cls.class_
-    if isinstance(related_cls, _class_resolver):
-        related_cls = related_cls()
-    return related_cls
+    return class_resolver(related_cls)
+
 
 def normalize_collection_class(collection_class):
     if isinstance(collection_class, FunctionType):
@@ -44,6 +37,7 @@ def normalize_collection_class(collection_class):
     if collection_class in (set, list, OrderingList):
         return list
     raise Exception('Unknown collection_class: %s' % collection_class)
+
 
 class Field(object):
 
@@ -182,7 +176,7 @@ class Field(object):
 
     @classmethod
     def field_kwargs_from_attr(cls, key, attr, model):
-        if attr.extension_type == ASSOCIATION_PROXY:
+        if is_proxy(attr):
             kwargs = cls.field_kwargs_from_proxy(key, attr, model)
         elif isinstance(attr.property, ColumnProperty):
             kwargs = cls.field_kwargs_from_column(key, attr, model)

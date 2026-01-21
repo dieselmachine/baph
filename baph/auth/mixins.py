@@ -4,7 +4,6 @@ import logging
 from django.conf import settings
 from sqlalchemy import *
 from sqlalchemy import inspect
-from sqlalchemy.ext.declarative.clsregistry import _class_resolver
 from sqlalchemy.orm import lazyload
 
 from baph.db import ORM

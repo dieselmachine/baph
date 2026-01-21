@@ -21,13 +21,13 @@ from sqlalchemy.schema import ForeignKeyConstraint
 
 from baph.db import ORM
 from baph.db.models import signals
-from baph.db.models.loading import get_model, register_models
-from baph.db.models.mixins import CacheMixin, GlobalMixin, ModelPermissionMixin
-from baph.db.models.options import Options
-from baph.db.models.utils import key_to_value
 from baph.utils.functional import cachedclassproperty
 from baph.utils.importing import remove_class
 from baph.utils.module_loading import import_string
+from .loading import get_model, register_models
+from .mixins import CacheMixin, GlobalMixin, ModelPermissionMixin
+from .options import Options
+from .utils import is_proxy, key_to_value
 
 
 @compiles(ForeignKeyConstraint)
@@ -390,7 +390,7 @@ class ModelBase(type):
         if proxy.scalar:
             # column
             prop = proxy.remote_attr.property
-        elif proxy.remote_attr.extension_type == ASSOCIATION_PROXY:
+        elif is_proxy(proxy.remote_attr):
             prop = cls.get_prop_from_proxy(proxy.remote_attr)
         elif isinstance(proxy.remote_attr.property, RelationshipProperty):
             prop = proxy.remote_attr.property

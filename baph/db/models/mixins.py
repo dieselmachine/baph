@@ -10,7 +10,6 @@ from django.core.cache import get_cache
 from sqlalchemy import *
 from sqlalchemy import inspect
 from sqlalchemy.ext.declarative import declared_attr
-from sqlalchemy.ext.declarative.clsregistry import _class_resolver
 from sqlalchemy.ext.hybrid import hybrid_method
 from sqlalchemy.orm import class_mapper, object_session
 from sqlalchemy.orm.attributes import get_history, instance_dict
@@ -18,7 +17,8 @@ from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 from sqlalchemy.orm.util import has_identity, identity_key
 
 from baph.db import ORM
-from .utils import column_to_attr, class_resolver
+from .fields import get_related_class_from_attr
+from .utils import column_to_attr, class_resolver, is_proxy
 
 
 cache_logger = logging.getLogger('cache')
@@ -700,6 +700,7 @@ class CacheMixin(object):
               # if the key no longer exists, set a new key
               cache.set(key, int(time.time()))
 
+
 class ModelPermissionMixin(object):
 
     def get_context(self, depth=0):
@@ -707,6 +708,9 @@ class ModelPermissionMixin(object):
         for key,attr in inspect(self.__class__).all_orm_descriptors.items():
             if not attr.is_attribute:
                 continue
+            if is_proxy(attr):
+                continue
+
             if type(attr.property) == ColumnProperty:
                 cls_name = self.__class__.__name__.lower()
                 ctx_key = '%s.%s' % (cls_name, key)
@@ -824,18 +828,7 @@ class ModelPermissionMixin(object):
     @classmethod
     def get_related_class(cls, rel_name):
         attr = getattr(cls, rel_name)
-        prop = attr.property
-        related_cls = prop.argument
-        if isinstance(related_cls, types.FunctionType):
-            # lazy-loaded Model
-            related_cls = related_cls()
-        if isinstance(related_cls, _class_resolver):
-            # lazy-loaded Model
-            related_cls = related_cls()
-        if hasattr(related_cls, 'is_mapper') and related_cls.is_mapper:
-            # we found a mapper, grab the class from it
-            related_cls = related_cls.class_
-        return related_cls
+        return get_related_class_from_attr(attr)
 
     def get_parent(self, attr_name):
         # first, try grabbing it directly
