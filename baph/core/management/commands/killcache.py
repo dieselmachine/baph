@@ -14,6 +14,7 @@ from sqlalchemy.orm.util import identity_key
 from sqlalchemy.sql import compiler
 
 from baph.core.management.base import BaseCommand #NoArgsCommand
+from baph.db.models.utils import get_registry
 from baph.db.orm import ORM
 
 
@@ -23,20 +24,25 @@ error_msg = make_style(fg='red')
 info_msg = make_style(fg='blue')
 
 orm = ORM.get()
-Base = orm.Base
+
 
 def get_cacheable_models():
-    for k,v in sorted(Base._decl_class_registry.items()):
+    registry = get_registry()
+
+    for k,v in sorted(registry.items()):
         if k.startswith('_'):
             # skip internal SA attrs
             continue
         if v._meta.cache_detail_fields:
             yield k
 
+
 def lookup_model():
+    registry = get_registry()
+
     name = raw_input('Enter model name ("L" to list): ')
     name = name.lower()
-    for k,v in Base._decl_class_registry.items():
+    for k,v in registry.items():
         if k.startswith('_'):
             continue
         if name == 'l':
@@ -82,6 +88,7 @@ class Command(BaseCommand):
         else:
             pks = None
 
+        registry = get_registry()
         print('')
         while True:
             if not model_name:
@@ -89,11 +96,11 @@ class Command(BaseCommand):
             if not model_name:
                 # quit
                 break
-            if not model_name in Base._decl_class_registry:
+            if model_name not in registry:
                 print(error_msg('Invalid model name: %s' % model_name))
                 model_name = None
                 continue
-            model = Base._decl_class_registry[model_name]
+            model = registry[model_name]
 
             if not pks:
                 pk = prompt_for_pk(model)

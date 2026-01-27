@@ -145,6 +145,9 @@ def module_to_filename(module_name):
 
 def remove_class(cls, name):
     from baph.db.models.loading import unregister_models
+    from baph.db.models.utils import get_registry
+
+    registry = get_registry()
     subs = cls.__subclasses__()
     subs = [s for s in subs if s.__module__ != cls.__module__]
     if not subs:
@@ -152,11 +155,11 @@ def remove_class(cls, name):
         unregister_models(cls._meta.app_label, cls._meta.model_name)
 
         # remove from SA class registry
-        if cls.__name__ in cls._decl_class_registry:
-            del cls._decl_class_registry[cls.__name__]
+        if cls.__name__ in registry:
+            del registry[cls.__name__]
 
         # remove from SA module registry
-        root = cls._decl_class_registry['_sa_module_registry']
+        root = registry['_sa_module_registry']
         tokens = cls.__module__.split(".")
         while tokens:
             token = tokens.pop(0)

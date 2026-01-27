@@ -17,6 +17,7 @@ from sqlalchemy.ext.declarative import has_inherited_table
 
 from baph.auth import models as auth_app #, get_user_model
 from baph.db.models import get_models
+from baph.db.models.utils import get_registry
 from baph.db.orm import Base, ORM
 #from baph.db import Session
 #from baph.db.models import signals, get_models
@@ -33,6 +34,7 @@ def _get_all_permissions(opts):
     """
     Returns (action, scope, codename, name) for all permissions in the given opts.
     """
+    name = opts.model.__name__
     perms = []
     resources = opts.permission_resources
     handler = opts.permission_handler
@@ -84,11 +86,12 @@ def _get_all_permissions(opts):
         
 def create_permissions(app, created_models, verbosity, db=DEFAULT_DB_ALIAS,
                        **kwargs):
+    registry = get_registry()
     app_models = []
     for k, v in vars(app).items():
-        if k not in orm.Base._decl_class_registry:
+        if k not in registry:
             continue
-        if v not in orm.Base._decl_class_registry.values():
+        if v not in registry.values():
             continue
         if hasattr(app, '__package__') and app.__package__ + '.models' != v.__module__:
             continue

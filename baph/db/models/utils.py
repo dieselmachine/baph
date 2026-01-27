@@ -1,6 +1,17 @@
 from inspect import isclass
 
+import six
 from sqlalchemy import inspect
+
+
+def get_registry():
+    """ returns the sqla class registry """
+    from baph.db.orm import Base
+
+    try: # sqla < 1.4
+        return Base._decl_class_registry
+    except AttributeError: # sqla >= 1.4
+        return Base.registry._class_registry
 
 
 def is_proxy(attr):
@@ -36,6 +47,11 @@ def class_resolver(cls):
         return cls.class_
     elif callable(cls):
         return cls()
+    elif isinstance(cls, six.text_type):
+        registry = get_registry()
+        if cls in registry:
+            return registry[cls]
+        return None
     else:
         assert False
 

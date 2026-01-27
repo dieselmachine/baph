@@ -61,17 +61,18 @@ class SQLAlchemyFrameProcessor(FrameProcessor):
       entity = resolve_entity(args['mapper'])
     elif func_name == 'scalar':
       op = 'load scalar'
-      col_entity = args['self']._entity_zero()
-      entity = str(col_entity)
-      if str(entity).startswith('count('):
-        op = 'count'
-        entity = resolve_entity(col_entity.entity_zero)
+      entity = args['self'].column_descriptions[0]['entity']
     elif func_name == '_load_expired':
       op = 'load expired'
       entity = resolve_entity(type(args['state'].object))
     elif func_name in ('first', 'one'):
       op = 'load'
-      entity = resolve_entity(args['self']._mapper_zero())
+      s = args['self']
+      meta = getattr(s, '_metadata', None)
+      if meta:
+        entity = list(s._metadata.keys)[0]
+      else:
+        entity = args['self'].column_descriptions[0]['entity']
     elif func_name == '__getitem__':
       op = 'load multi'
       entity = resolve_entity(args['self']._mapper_zero())
@@ -79,6 +80,7 @@ class SQLAlchemyFrameProcessor(FrameProcessor):
       return
     context['op'] = op
     context['entity'] = entity
+
 
 class QueryLogger(object):
   __slots__ = ['queries', 'emit', 'processors', 'args']

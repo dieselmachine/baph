@@ -8,7 +8,8 @@ from sqlalchemy.orm import lazyload
 
 from baph.db import ORM
 from baph.db.models.loading import cache
-from baph.db.models.utils import class_resolver, column_to_attr, key_to_value
+from baph.db.models.utils import (class_resolver, column_to_attr, get_registry,
+                                  key_to_value)
 
 
 logger = logging.getLogger('authorization')
@@ -36,11 +37,11 @@ def convert_filter(k, cls=None):
     return (col, joins)
 
 def string_to_model(string):
-    from baph.db.orm import Base
-    if string in Base._decl_class_registry:
-        return Base._decl_class_registry[string]
-    elif string.title() in Base._decl_class_registry:
-        return Base._decl_class_registry[string.title()]
+    registry = get_registry()
+    if string in registry:
+        return registry[string]
+    elif string.title() in registry:
+        return registry[string.title()]
     else:
         # this string doesn't match a resource
         return None
@@ -193,7 +194,7 @@ class UserPermissionMixin(object):
 
         orm = ORM.get()
         cls_name = tuple(perms)[0].resource
-        cls = orm.Base._decl_class_registry[cls_name]
+        cls = string_to_model(cls_name)
 
         requires_load = False
         if action == 'add':
@@ -373,7 +374,7 @@ class UserPermissionMixin(object):
         applying to an existing query
         """
         orm = ORM.get()
-        cls = orm.Base._decl_class_registry[resource]
+        cls = string_to_model(resource)
         if cls._meta.permission_handler:
             # permissions for this object are routed to parent object
             parent_cls = cls.get_related_class(cls._meta.permission_handler)
@@ -409,7 +410,7 @@ class UserPermissionMixin(object):
                     lookup, key = cls._meta.filter_translations[key].split('.',1)
                 else:
                     lookup = resource
-                cls_ = orm.Base._decl_class_registry[lookup]
+                cls_ = string_to_model(lookup)
 
                 frags = key.split('.')
                 attr = frags.pop()

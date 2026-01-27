@@ -9,13 +9,12 @@ from django.utils.translation import (string_concat, get_language, activate,
 import six
 from sqlalchemy import inspect, Integer
 from sqlalchemy.orm import configure_mappers
-from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
-from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
 
 from baph.db import types
-from baph.db.models.fields import Field
 from baph.utils.text import camel_case_to_spaces
+from .fields import Field
+from .utils import is_proxy
 
 
 DEFAULT_NAMES = ('model_name', 'model_name_plural',
@@ -264,7 +263,7 @@ class Options(object):
             cache.append((field, None))
 
         for key, attr in insp.all_orm_descriptors.items():
-            if attr.extension_type == ASSOCIATION_PROXY:
+            if is_proxy(attr):
                 attr = getattr(self.model, key)
                 field = Field.field_from_attr(key, attr, self.model)
                 cache.append((field, None))

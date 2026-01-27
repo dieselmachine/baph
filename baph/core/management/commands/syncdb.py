@@ -12,6 +12,7 @@ from baph.core.management.new_base import BaseCommand
 from baph.core.management.sql import emit_post_sync_signal
 from baph.db import DEFAULT_DB_ALIAS
 from baph.db.models import get_apps, get_models
+from baph.db.models.utils import get_registry
 from baph.db.orm import ORM, Base
 from baph.db.utils import get_tablename
 
@@ -44,6 +45,7 @@ class Command(BaseCommand):
         load_initial_data = options.get('load_initial_data')
 
         self.style = no_style()
+        registry = get_registry()
 
         # Import the 'management' module within each installed app, to register
         # dispatcher events.
@@ -111,7 +113,7 @@ class Command(BaseCommand):
         existing_models = []
         if verbosity >= 1:
             self.stdout.write("Getting existing models...\n")
-        for cls_name, cls in Base._decl_class_registry.items():
+        for cls_name, cls in registry.items():
             tablename = get_tablename(cls)
             if tablename and tablename in existing_tables:
                 existing_models.append(cls)

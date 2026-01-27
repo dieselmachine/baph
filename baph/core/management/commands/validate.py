@@ -1,9 +1,12 @@
+import sys
+
 from sqlalchemy.orm import configure_mappers
 
 from baph.core.management.base import NoArgsCommand
+from baph.db.models.utils import get_registry
 from baph.db.orm import Base
 from baph.forms.models import fields_for_model
-import sys
+
 
 class Command(NoArgsCommand):
     help = "Validates all installed models."
@@ -20,7 +23,7 @@ class Command(NoArgsCommand):
             print('\t', table)
         """
         print '\nPost-Validation Class Registry:'
-        for k,v in sorted(Base._decl_class_registry.items()):
+        for k,v in sorted(registry.items()):
             print '\t', k, v
             if not hasattr(v, '__mapper__'):
                 continue

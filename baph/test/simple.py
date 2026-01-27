@@ -219,8 +219,12 @@ class BaphTestSuiteRunner(runner.DiscoverRunner):
         schemas = set(t.schema or default_schema \
             for t in Base.metadata.tables.values())
 
-        url = deepcopy(orm.engine.url)
-        url.database = None
+        try:
+            url = orm.engine.url._replace(database=None)
+        except AttributeError:
+            url = deepcopy(orm.engine.url)
+            url.database = None
+
         self.engine = create_engine(url)
         insp = inspect(self.engine)
 

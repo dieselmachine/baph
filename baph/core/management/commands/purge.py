@@ -102,8 +102,11 @@ class Command(BaseCommand):
       app_schemas = set(orm.Base.metadata._schemas)
       app_schemas.add(default_schema)
 
-      url = deepcopy(orm.engine.url)
-      url.database = None
+      try:
+        url = orm.engine.url._replace(database=None)
+      except AttributeError:
+        url = deepcopy(orm.engine.url)
+        url.database = None
       engine = create_engine(url)
       inspector = inspect(engine)
 

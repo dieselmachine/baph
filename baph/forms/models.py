@@ -8,10 +8,9 @@ from django.forms.util import ErrorList
 from django.forms.widgets import media_property
 from django.utils.datastructures import SortedDict
 from sqlalchemy import *
-from sqlalchemy.ext.associationproxy import AssociationProxy
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
-from sqlalchemy.sql.expression import _BinaryExpression, _Label
+from sqlalchemy.sql.expression import BinaryExpression, Label
 
 
 FIELD_MAP = {
@@ -83,7 +82,7 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
                 # this is readonly, do not add to form
                 continue
             expr = prop.expr(model)
-            if not isinstance(expr, _BinaryExpression):
+            if not isinstance(expr, BinaryExpression):
                 raise Exception('hybrid_property expr is not a BinaryExpression')
             data_type = type(expr.type)
             kwargs = {
@@ -93,7 +92,7 @@ def fields_for_model(model, fields=None, exclude=None, widgets=None,
             # this is a column property
             col = prop.columns[0]
             data_type = col.type.__class__
-            if isinstance(col, _Label):
+            if isinstance(col, Label):
                 # this is an aliased expression, with no setter
                 continue
             if col.default is not None:

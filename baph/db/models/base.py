@@ -6,12 +6,17 @@ import sys
 
 from django.conf import settings
 from sqlalchemy import and_, event, inspect
-from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.ext.declarative.base import _add_attribute, _as_declarative
-from sqlalchemy.ext.declarative.clsregistry import add_class
-from sqlalchemy.ext.hybrid import HYBRID_METHOD, HYBRID_PROPERTY
+try: # < 1.4
+    from sqlalchemy.ext.declarative.base import _add_attribute, _as_declarative
+    from sqlalchemy.ext.declarative.clsregistry import add_class
+    sqla_mode = 'old'
+except ImportError: # >= 1.4
+    from sqlalchemy.orm.decl_base import _add_attribute, _as_declarative
+    from sqlalchemy.orm.clsregistry import add_class
+    sqla_mode = 'new'
+
 from sqlalchemy.orm import attributes, mapper, object_session
 from sqlalchemy.orm.interfaces import MANYTOONE
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty
@@ -21,6 +26,7 @@ from sqlalchemy.schema import ForeignKeyConstraint
 
 from baph.db import ORM
 from baph.db.models import signals
+from baph.db.models.utils import get_registry
 from baph.utils.functional import cachedclassproperty
 from baph.utils.importing import remove_class
 from baph.utils.module_loading import import_string
@@ -269,18 +275,30 @@ def normalize_args(args):
 class ModelBase(type):
 
     def __init__(cls, name, bases, attrs):
-        # print('%s.__init__(%s)' % (name, cls))
+        #print('%s.__init__(%s)' % (name, cls))
         found = False
-        registry = cls._decl_class_registry
+        try:
+            registry = cls._decl_class_registry
+        except AttributeError:
+            registry = cls.registry._class_registry
+
         if name in registry:
             found = True
         elif cls in registry.values():
             found = True
-            add_class(name, cls)
+            if sqla_mode == 'old':
+                add_class(name, cls)
+            else:
+                add_class(name, cls, registry)
 
-        if '_decl_class_registry' not in cls.__dict__:
-            if not found:
-                _as_declarative(cls, name, cls.__dict__)
+        if sqla_mode == 'old':
+            if '_decl_class_registry' not in cls.__dict__:
+                if not found:
+                    _as_declarative(cls, name, cls.__dict__)
+        else:
+            if 'registry' not in cls.__dict__:
+                if not found:
+                    _as_declarative(cls.registry, cls, cls.__dict__)
 
         type.__init__(cls, name, bases, attrs)
 
@@ -301,10 +319,10 @@ class ModelBase(type):
         if classcell is not None:
             new_attrs['__classcell__'] = classcell
         new_class = super_new(cls, name, bases, new_attrs)
-
         # check the class registry to see if we created this already
-        if name in new_class._decl_class_registry:
-            return new_class._decl_class_registry[name]
+        registry = get_registry()
+        if name in registry:
+            return registry[name]
 
         attr_meta = attrs.pop('Meta', None)
         if not attr_meta:
@@ -408,7 +426,7 @@ class ModelBase(type):
                 continue
             elif attr.extension_type == HYBRID_PROPERTY:
                 prop = attr
-            elif attr.extension_type == ASSOCIATION_PROXY:
+            elif is_proxy(attr):
                 proxy = getattr(cls, key)
                 prop = cls.get_prop_from_proxy(proxy)
             elif isinstance(attr.property, ColumnProperty):

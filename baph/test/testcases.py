@@ -74,7 +74,8 @@ class TransactionTestCase(test.TransactionTestCase):
         #print('BaphTTest.teardownClass end')
 
     def run(self, *args, **kwargs):
-        #print('\nBaphTest.run:', self)
+        #print('BaphTest.run: %s.%s' % (self.__class__.__name__,
+        #                               self._testMethodName))
         #db_debug(str(self))
         type(self).tests_run += 1
         super(TransactionTestCase, self).run(*args, **kwargs)

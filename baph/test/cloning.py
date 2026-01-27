@@ -2,11 +2,11 @@ import copy
 import inspect as pyinspect
 
 from sqlalchemy import inspect
-from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
 from sqlalchemy.ext.orderinglist import OrderingList
 from sqlalchemy.orm.util import identity_key
 
 from baph.db.models.cloning import *
+from baph.db.models.utils import class_resolver, is_proxy
 from baph.utils.collections import duck_type_collection
 
 
@@ -64,7 +64,7 @@ def get_default_value(obj, key):
   else:
     cls = type(obj)
   attr = getattr(cls, key)
-  while attr.extension_type == ASSOCIATION_PROXY:
+  while is_proxy(attr):
     attr = attr.remote_attr
   prop = attr.property
   column = prop.columns[0]
@@ -106,7 +106,7 @@ class CloningTestMixin(object):
 
     attrs = path.split('.')
     root_classname = attrs.pop(0)
-    root_cls = cls._decl_class_registry[root_classname]
+    root_cls = class_resolver(root_classname)
 
     rule_keys = [root_classname]
     mapper = inspect(root_cls)
