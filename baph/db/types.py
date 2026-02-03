@@ -18,7 +18,7 @@ from django.conf import settings
 from django.utils.timezone import is_naive, is_aware, make_aware
 from pytz import timezone
 from sqlalchemy import types
-from sqlalchemy.databases import mysql, postgresql
+from sqlalchemy.dialects import mysql, postgresql
 from sqlalchemy.ext.mutable import Mutable
 
 
@@ -42,9 +42,9 @@ class UUID(types.TypeDecorator):
 
     def load_dialect_impl(self, dialect):
         if dialect.name == 'mysql':
-            return dialect.type_descriptor(mysql.MSBinary(16))
+            return dialect.type_descriptor(mysql.BINARY(16))
         elif dialect.name in ('postgres', 'postgresql'):
-            return dialect.type_descriptor(postgresql.PGUuid())
+            return dialect.type_descriptor(postgresql.UUID())
         else:
             return dialect.type_descriptor(types.CHAR(self.impl.length))
 

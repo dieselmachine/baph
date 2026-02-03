@@ -21,10 +21,11 @@ from sqlalchemy.schema import (CreateSchema, DropSchema,
   ForeignKeyConstraint, Table, MetaData)
 
 from baph.core.management.new_base import BaseCommand
-from baph.db import DEFAULT_DB_ALIAS
+from baph.db import db, DEFAULT_DB_ALIAS
 from baph.db.models import get_apps, get_models
 from baph.db.orm import ORM
 from baph.db.utils import get_tablename
+from baph.utils.db import (get_base_session, get_drop_statements)
 
 
 post_syncdb = Signal(providing_args=["class", "app", "created_models", 
@@ -97,56 +98,11 @@ class Command(BaseCommand):
       confirm = 'yes'
 
     if confirm == 'yes':
-      # get a list of all schemas used by the app
-      default_schema = orm.engine.url.database
-      app_schemas = set(orm.Base.metadata._schemas)
-      app_schemas.add(default_schema)
-
-      try:
-        url = orm.engine.url._replace(database=None)
-      except AttributeError:
-        url = deepcopy(orm.engine.url)
-        url.database = None
-      engine = create_engine(url)
-      inspector = inspect(engine)
-
-      # get a list of existing schemas
-      db_schemas = set(inspector.get_schema_names())
-
-      schemas = app_schemas.intersection(db_schemas)
-
-      app_tables = set()
-      for table in orm.Base.metadata.tables.values():
-        schema = table.schema or default_schema
-        app_tables.add('%s.%s' % (schema, table.name))
-
-      metadata = MetaData()
-      db_tables = []
-      all_fks = []
-
-      for schema in schemas:
-        for table_name in inspector.get_table_names(schema):
-          fullname = '%s.%s' % (schema, table_name)
-          if fullname not in app_tables:
-            continue
-          fks = []
-          for fk in inspector.get_foreign_keys(table_name, schema=schema):
-            if not fk['name']:
-                continue
-            fks.append(ForeignKeyConstraint((),(),name=fk['name']))
-          t = Table(table_name, metadata, *fks, schema=schema)
-          db_tables.append(t)
-          all_fks.extend(fks)
-
-      session = Session(bind=engine)
-      for fkc in all_fks:
-        session.execute(DropConstraint(fkc))
-      for table in db_tables:
-        session.execute(DropTable(table))
-      for schema in schemas:
-        session.execute(DropSchema(schema))
-      session.commit()
-      session.bind.dispose()
-
+        drops = get_drop_statements()
+        session = get_base_session()
+        for drop in drops:
+            session.execute(drop)
+        session.commit()
+        session.bind.dispose()
     else:
       self.stdout.write("Purge cancelled.\n")

@@ -16,6 +16,10 @@ except ImportError: # >= 1.4
     from sqlalchemy.orm.decl_base import _add_attribute, _as_declarative
     from sqlalchemy.orm.clsregistry import add_class
     sqla_mode = 'new'
+try:
+    from sqlalchemy.ext.hybrid import HybridExtensionType as hybrid
+except ImportError:
+    from sqlalchemy.ext import hybrid
 
 from sqlalchemy.orm import attributes, mapper, object_session
 from sqlalchemy.orm.interfaces import MANYTOONE
@@ -27,6 +31,7 @@ from sqlalchemy.schema import ForeignKeyConstraint
 from baph.db import ORM
 from baph.db.models import signals
 from baph.db.models.utils import get_registry
+from baph.utils.db import get_default_schema
 from baph.utils.functional import cachedclassproperty
 from baph.utils.importing import remove_class
 from baph.utils.module_loading import import_string
@@ -36,15 +41,19 @@ from .options import Options
 from .utils import is_proxy, key_to_value
 
 
+HYBRID_METHOD = hybrid.HYBRID_METHOD
+HYBRID_PROPERTY = hybrid.HYBRID_PROPERTY
+
+
 @compiles(ForeignKeyConstraint)
 def set_default_schema(constraint, compiler, **kw):
     """ This overrides the formatting function used to render remote tables
         in foreign key declarations, because innodb (at least, perhaps others)
         requires explicit schemas when declaring a FK which crosses schemas """
     remote_table = list(constraint._elements.values())[0].column.table
+    default_schema = get_default_schema()
 
     if remote_table.schema is None:
-        default_schema = remote_table.bind.url.database
         constraint_schema = list(constraint.columns)[0].table.schema
         if constraint_schema not in (default_schema, None):
             """ if the constraint schema is not the default, we need to

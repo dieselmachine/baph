@@ -768,7 +768,8 @@ class ModelPermissionMixin(object):
             if not attr.is_attribute:
                 continue
             prop = attr.property
-            if type(prop) != RelationshipProperty:
+            #if type(prop) != RelationshipProperty:
+            if not isinstance(prop, RelationshipProperty):
                 continue
             if prop.direction.name != 'MANYTOONE':
                 continue

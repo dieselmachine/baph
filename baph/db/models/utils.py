@@ -19,10 +19,12 @@ def is_proxy(attr):
         # sqla 1.2
         from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
         return attr.extension_type == ASSOCIATION_PROXY
-    except AttributeError:
+    except ImportError:
         # sqla 1.3
-        from sqlalchemy.ext.associationproxy import AssociationProxyInstance
-        return isinstance(attr, AssociationProxyInstance)
+        from sqlalchemy.ext.associationproxy import (AssociationProxy,
+            AssociationProxyExtensionType, AssociationProxyInstance)
+        ASSOCIATION_PROXY = AssociationProxyExtensionType.ASSOCIATION_PROXY
+        return isinstance(attr, (AssociationProxy, AssociationProxyInstance))
 
 
 def has_inherited_table(cls):

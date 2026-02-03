@@ -111,7 +111,7 @@ class DatabaseWrapper(object):
         self.settings_dict = settings_dict
         self.alias = alias
         self.engine = load_engine(settings_dict)
-        self.Base = get_declarative_base(bind=self.engine)
+        self.Base = get_declarative_base()
         self.session_factory = sessionmaker(bind=self.engine)
 
         if getattr(settings, 'USE_TRANSACTIONS', False):
@@ -139,8 +139,11 @@ class DatabaseWrapper(object):
     def get_base_engine(self):
         """ Return an engine with no schema, to allow operations before 
             schemas have been setup """
-        url = deepcopy(self.engine.url)
-        url.database = None
+        try:
+            url = self.engine.url._replace(database=None)
+        except AttributeError:
+            url = deepcopy(self.engine.url)
+            url.database = None
         return create_engine(url)
 
     @cached_property

@@ -7,8 +7,6 @@ from django.core import validators
 from django.utils.encoding import smart_text, force_text, force_bytes
 from django.utils.text import capfirst
 from sqlalchemy import *
-from sqlalchemy.ext.associationproxy import ASSOCIATION_PROXY
-from sqlalchemy.ext.hybrid import HYBRID_PROPERTY, HYBRID_METHOD
 from sqlalchemy.ext.orderinglist import OrderingList
 from sqlalchemy.orm.collections import MappedCollection
 from sqlalchemy.orm.properties import ColumnProperty, RelationshipProperty

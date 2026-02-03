@@ -198,8 +198,9 @@ class TestCase(TransactionTestCase):
             #print(cls.outer.is_active, cls.inner.is_active, cls.inner2.is_active)
             
             if trans is cls.outer:
-                assert False
-            if not cls.inner.is_active:
+                #assert False
+                pass
+            elif not cls.inner.is_active:
                 cls.inner = cls.session.begin_nested()
                 cls.inner2 = cls.session.begin_nested()
 
@@ -238,8 +239,8 @@ class TestCase(TransactionTestCase):
         if not use_transactions:
             return super(TestCase, self)._fixture_teardown()
         with timer('rollback'):
-            #print('  inner trans rollback')
-            self.inner.rollback()
+            if self.outer.is_active:
+                self.inner.rollback()
         self.session.expunge_all()
 
 

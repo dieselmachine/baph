@@ -3,6 +3,7 @@ from django.core import signals
 from django.core.exceptions import ImproperlyConfigured
 from django.db import (ConnectionHandler, ConnectionRouter,
                        DefaultConnectionProxy, DatabaseError, IntegrityError)
+from werkzeug.local import LocalProxy
 
 from baph.db.utils import EngineHandler, DEFAULT_DB_ALIAS
 
@@ -18,3 +19,15 @@ connections = ConnectionHandler()
 router = ConnectionRouter()
 
 connection = DefaultConnectionProxy()
+
+
+def get_default_orm():
+    return ORM.get()
+
+db = LocalProxy(get_default_orm)
+
+
+def get_session():
+    return db.sessionmaker()
+
+session = LocalProxy(get_session)

@@ -18,6 +18,8 @@ from sqlalchemy.schema import CreateSchema, DropSchema
 from baph.core.management import call_command
 from baph.db.models import get_app, get_apps
 from baph.db.orm import ORM, Base
+from baph.utils.db import (create_app_schemas, create_app_tables,
+                           get_app_schemas, get_existing_schemas)
 from baph.utils.importing import import_any_module
 
 
@@ -214,19 +216,27 @@ class BaphTestSuiteRunner(runner.DiscoverRunner):
         for app in settings.INSTALLED_APPS:
             import_any_module(['%s.models' % app], raise_error=False)
 
+        schemas = get_app_schemas()
+        existing_schemas = get_existing_schemas()
+
+        # if any of the needed schemas exist, do not proceed
+        conflicts = schemas.intersection(existing_schemas)
+        if conflicts:
+            for c in conflicts:
+                print('drop schema %s;' % c)
+            sys.exit('The following schemas are already present: %s. ' \
+                'TestRunner cannot proceeed' % ','.join(conflicts))
+
+        create_app_schemas()
+        create_app_tables()
+
+        '''
         # determine which schemas we need
-        default_schema = orm.engine.url.database
-        schemas = set(t.schema or default_schema \
-            for t in Base.metadata.tables.values())
+        schemas = get_metadata_schemas(Base.metadata)
+        schemas.add(default_schema)
 
-        try:
-            url = orm.engine.url._replace(database=None)
-        except AttributeError:
-            url = deepcopy(orm.engine.url)
-            url.database = None
-
-        self.engine = create_engine(url)
-        insp = inspect(self.engine)
+        base_engine = orm.get_base_engine()
+        insp = inspect(base_engine)
 
         # get a list of already-existing schemas
         existing_schemas = set(insp.get_schema_names())
@@ -240,16 +250,12 @@ class BaphTestSuiteRunner(runner.DiscoverRunner):
                 'TestRunner cannot proceeed' % ','.join(conflicts))
         
         # create schemas
-        session = Session(bind=self.engine)
-        for schema in schemas:
-            session.execute(CreateSchema(schema))
-        session.commit()
-        session.bind.dispose()
+        create_schemas(base_engine, *schemas)
 
         # create tables
         if len(orm.Base.metadata.tables) > 0:
-            orm.Base.metadata.create_all(checkfirst=False)
-
+            orm.Base.metadata.create_all(bind=orm.engine, checkfirst=False)
+        '''
         # generate permissions
         call_command('createpermissions')
 
