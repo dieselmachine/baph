@@ -30,6 +30,7 @@ from baph.db.models.utils import get_registry
 from baph.utils.functional import cachedclassproperty
 from baph.utils.importing import remove_class
 from baph.utils.module_loading import import_string
+from .compat import HYBRID_METHOD, HYBRID_PROPERTY
 from .loading import get_model, register_models
 from .mixins import CacheMixin, GlobalMixin, ModelPermissionMixin
 from .options import Options
